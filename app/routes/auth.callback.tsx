@@ -124,13 +124,16 @@ export default function AuthCallback({ loaderData }: Route.ComponentProps) {
           window.location.origin
         );
         // Redirect parent window directly to ensure cookie is available
-        // Add a small delay to ensure cookie is committed
+        // Add a delay to ensure cookie is committed and readable
         setTimeout(() => {
           if (window.opener && !window.opener.closed) {
-            window.opener.location.href = loaderData.redirectTo || "/";
+            // Use a full page reload with cache bust to ensure fresh session
+            const redirectUrl = loaderData.redirectTo || "/";
+            window.opener.location.href = redirectUrl;
           }
-          window.close();
-        }, 300);
+          // Close popup after redirect starts
+          setTimeout(() => window.close(), 100);
+        }, 500);
       } else {
         // Not in popup - redirect normally
         window.location.href = loaderData.redirectTo || "/";

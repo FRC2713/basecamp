@@ -12,7 +12,41 @@ export async function loader({ request }: Route.LoaderArgs) {
   
   // Check if already authenticated
   if (session.get("accessToken")) {
-    return redirect(redirectTo);
+    // Commit session to ensure cookie is set
+    const cookie = await commitSession(session);
+    return redirect(redirectTo, {
+      headers: {
+        "Set-Cookie": cookie,
+      },
+    });
+  }
+  
+  // If we're already in an OAuth flow (have oauthState), don't start a new one
+  // This prevents redirect loops
+  if (session.get("oauthState")) {
+    // Still return popup mode, but don't regenerate state
+    const existingState = session.get("oauthState");
+    const storedRedirect = session.get("oauthRedirect") || redirectTo;
+    
+    const clientId = process.env.BASECAMP_CLIENT_ID;
+    const redirectUri = process.env.BASECAMP_REDIRECT_URI;
+    
+    if (!clientId || !redirectUri) {
+      throw new Error("Missing BASECAMP_CLIENT_ID or BASECAMP_REDIRECT_URI environment variables");
+    }
+    
+    const authUrl = getAuthorizationUrl(redirectUri, clientId, existingState);
+    const cookie = await commitSession(session);
+    const redirectUrlWithState = `/auth/redirect?url=${encodeURIComponent(authUrl)}&state=${existingState}`;
+    
+    return {
+      authUrl: redirectUrlWithState,
+      usePopup: true,
+      redirectTo: storedRedirect,
+      headers: {
+        "Set-Cookie": cookie,
+      },
+    };
   }
 
   const clientId = process.env.BASECAMP_CLIENT_ID;
@@ -95,14 +129,11 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
       if (event.origin !== window.location.origin) return;
       
       if (event.data.type === "oauth-complete") {
-        popup.close();
         clearInterval(checkClosed);
         window.removeEventListener("message", messageHandler);
-        // Force a full page reload to ensure session cookie is read
-        // Use a small delay to ensure popup cookie is committed
-        setTimeout(() => {
-          window.location.href = redirectTo || "/";
-        }, 100);
+        // Don't close popup here - let the callback close it after redirect
+        // Don't redirect here - let the callback redirect the parent directly
+        // This prevents double redirects
       }
     };
 
