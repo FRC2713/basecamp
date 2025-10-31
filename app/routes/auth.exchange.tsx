@@ -1,11 +1,13 @@
 import type { Route } from "./+types/auth.exchange";
-import { json } from "react-router";
 import { exchangeCodeForToken } from "~/lib/basecampApi/auth";
 import { getSession, commitSession } from "~/lib/session";
 
 export async function action({ request }: Route.ActionArgs) {
   if (request.method !== "POST") {
-    return json({ success: false, error: "Method not allowed" }, { status: 405 });
+    return Response.json(
+      { success: false, error: "Method not allowed" },
+      { status: 405 }
+    );
   }
 
   const session = await getSession(request);
@@ -13,17 +15,26 @@ export async function action({ request }: Route.ActionArgs) {
   const { code, state } = body;
 
   if (!code) {
-    return json({ success: false, error: "No authorization code provided" }, { status: 400 });
+    return Response.json(
+      { success: false, error: "No authorization code provided" },
+      { status: 400 }
+    );
   }
 
   if (!state) {
-    return json({ success: false, error: "No state parameter provided" }, { status: 400 });
+    return Response.json(
+      { success: false, error: "No state parameter provided" },
+      { status: 400 }
+    );
   }
 
   // Validate state against session to prevent CSRF attacks
   const storedState = session.get("oauthState");
   if (!storedState || state !== storedState) {
-    return json({ success: false, error: "Invalid state parameter" }, { status: 400 });
+    return Response.json(
+      { success: false, error: "Invalid state parameter" },
+      { status: 400 }
+    );
   }
 
   const clientId = process.env.BASECAMP_CLIENT_ID;
@@ -31,7 +42,7 @@ export async function action({ request }: Route.ActionArgs) {
   const redirectUri = process.env.BASECAMP_REDIRECT_URI;
 
   if (!clientId || !clientSecret || !redirectUri) {
-    return json(
+    return Response.json(
       { success: false, error: "Missing Basecamp OAuth environment variables" },
       { status: 500 }
     );
@@ -59,7 +70,7 @@ export async function action({ request }: Route.ActionArgs) {
     // Commit session to save cookies
     const cookie = await commitSession(session);
 
-    return json(
+    return Response.json(
       { success: true, redirectTo },
       {
         status: 200,
@@ -70,7 +81,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   } catch (error) {
     console.error("Token exchange error:", error);
-    return json(
+    return Response.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Failed to exchange authorization code",
