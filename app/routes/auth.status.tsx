@@ -1,19 +1,18 @@
 import type { Route } from "./+types/auth.status";
-import { json } from "react-router";
 import { isOnshapeAuthenticated, isBasecampAuthenticated } from "~/lib/session";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const onshapeAuthenticated = await isOnshapeAuthenticated(request);
   const basecampAuthenticated = await isBasecampAuthenticated(request);
 
-  return json({
+  return {
     onshape: {
       authenticated: onshapeAuthenticated,
     },
     basecamp: {
       authenticated: basecampAuthenticated,
     },
-  });
+  };
 }
 
 export default function AuthStatus({ loaderData }: Route.ComponentProps) {
