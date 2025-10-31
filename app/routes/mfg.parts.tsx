@@ -1,8 +1,7 @@
 import type { Route } from "./+types/mfg.parts";
 import { redirect } from "react-router";
 import { isOnshapeAuthenticated } from "~/lib/session";
-import { createOnshapeClient } from "~/lib/onshapeApi/client";
-import type { OnshapePart } from "~/lib/onshapeApi/client";
+import { createOnshapeApiClient, getPartsWmve, type BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { AlertCircle, Box } from "lucide-react";
@@ -11,8 +10,8 @@ import { useState } from "react";
 /**
  * Component to display a single part with thumbnail error handling
  */
-function PartCard({ part }: { part: OnshapePart }) {
-  const thumbnailHref = part.thumbnail?.href;
+function PartCard({ part }: { part: BtPartMetadataInfo }) {
+  const thumbnailHref = part.thumbnailInfo?.href;
   const [thumbnailError, setThumbnailError] = useState(false);
 
   return (
@@ -20,13 +19,13 @@ function PartCard({ part }: { part: OnshapePart }) {
       <CardHeader>
         <div className="flex items-start justify-between">
           <CardTitle className="text-lg">
-            {part.name || `Part ${part.partId}`}
+            {part.name || `Part ${part.partId || part.id || 'Unknown'}`}
           </CardTitle>
           {part.isHidden && (
             <Badge variant="secondary">Hidden</Badge>
           )}
         </div>
-        {part.name && (
+        {part.name && part.partId && (
           <CardDescription>
             Part ID: <code className="text-xs">{part.partId}</code>
           </CardDescription>
@@ -35,7 +34,7 @@ function PartCard({ part }: { part: OnshapePart }) {
           <div className="mt-2">
             <img
               src={thumbnailHref}
-              alt={`Thumbnail for ${part.name || part.partId}`}
+              alt={`Thumbnail for ${part.name || part.partId || part.id || 'part'}`}
               className="w-full h-auto rounded border"
               onError={() => setThumbnailError(true)}
               style={{ maxHeight: '200px', objectFit: 'contain' }}
@@ -63,7 +62,7 @@ function PartCard({ part }: { part: OnshapePart }) {
               {part.appearance.color && (
                 <span className="inline-block w-4 h-4 rounded border border-gray-300 ml-1 align-middle" 
                       style={{
-                        backgroundColor: `rgba(${part.appearance.color[0]}, ${part.appearance.color[1]}, ${part.appearance.color[2]}, ${part.appearance.opacity ?? part.appearance.color[3] ?? 1})`
+                        backgroundColor: `rgba(${part.appearance.color.red ?? 0}, ${part.appearance.color.green ?? 0}, ${part.appearance.color.blue ?? 0}, ${part.appearance.opacity ?? 1})`
                       }}
                 />
               )}
@@ -136,10 +135,24 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   try {
-    const client = await createOnshapeClient(request);
+    const client = await createOnshapeApiClient(request);
     
-    // Call Onshape API to get parts
-    const parts = await client.getParts(documentId, instanceType, instanceId, elementId);
+    // Call Onshape API to get parts using the generated client
+    const response = await getPartsWmve({
+      client,
+      path: {
+        did: documentId,
+        wvm: instanceType,
+        wvmid: instanceId,
+        eid: elementId,
+      },
+      query: {
+        withThumbnails: true,
+      },
+    });
+
+    // Extract parts from response (response.data is an array of BtPartMetadataInfo)
+    const parts = response.data || [];
 
     return {
       parts,
@@ -155,13 +168,33 @@ export async function loader({ request }: Route.LoaderArgs) {
   } catch (error: unknown) {
     console.error("Error fetching parts from Onshape:", error);
     
-    const errorMessage = error && typeof error === "object" && "message" in error
-      ? String(error.message)
-      : "Failed to fetch parts from Onshape API";
+    // Handle error response from generated client
+    let errorMessage = "Failed to fetch parts from Onshape API";
+    let errorStatus: number | undefined;
 
-    const errorStatus = error && typeof error === "object" && "status" in error
-      ? Number(error.status)
-      : undefined;
+    if (error && typeof error === "object") {
+      if ("message" in error) {
+        errorMessage = String(error.message);
+      }
+      if ("status" in error) {
+        errorStatus = Number(error.status);
+      }
+      // The generated client might return error in a different format
+      if ("error" in error && error.error && typeof error.error === "object") {
+        if ("message" in error.error) {
+          errorMessage = String(error.error.message);
+        }
+        if ("status" in error.error) {
+          errorStatus = Number(error.error.status);
+        }
+      }
+      // Check response object for status
+      if ("response" in error && error.response && typeof error.response === "object") {
+        if ("status" in error.response) {
+          errorStatus = Number(error.response.status);
+        }
+      }
+    }
 
     let detailedError = errorMessage;
     if (errorStatus === 404) {
@@ -281,7 +314,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
             <h2 className="text-xl font-semibold mb-4">Parts</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {parts.map((part) => (
-                <PartCard key={part.partId} part={part} />
+                <PartCard key={part.partId || part.id || part.partIdentity || JSON.stringify(part)} part={part} />
               ))}
             </div>
           </div>
