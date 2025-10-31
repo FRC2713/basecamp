@@ -4,8 +4,8 @@ export default [
   // Auth routes (not in layout - no breadcrumbs)
   route("auth", "routes/auth.tsx"),
   route("auth/callback", "routes/auth.callback.tsx"),
+  route("auth/exchange", "routes/auth.exchange.tsx"),
   route("auth/logout", "routes/auth.logout.tsx"),
-  route("auth/redirect", "routes/auth.redirect.tsx"),
   route("auth/onshape", "routes/auth.onshape.tsx"),
   route("auth/onshape/callback", "routes/auth.onshape.callback.tsx"),
   route("auth/status", "routes/auth.status.tsx"),

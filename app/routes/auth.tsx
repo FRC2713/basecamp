@@ -37,10 +37,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     
     const authUrl = getAuthorizationUrl(redirectUri, clientId, existingState);
     const cookie = await commitSession(session);
-    const redirectUrlWithState = `/auth/redirect?url=${encodeURIComponent(authUrl)}&state=${existingState}`;
     
     return {
-      authUrl: redirectUrlWithState,
+      authUrl,
       usePopup: true,
       redirectTo: storedRedirect,
       headers: {
@@ -56,26 +55,22 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Error("Missing BASECAMP_CLIENT_ID or BASECAMP_REDIRECT_URI environment variables");
   }
 
-  // Generate state for CSRF protection (include redirect in state)
+  // Generate state for CSRF protection
   const state = randomBytes(32).toString("hex");
   session.set("oauthState", state);
   if (redirectTo !== "/") {
     session.set("oauthRedirect", redirectTo);
   }
 
-  // Always use popup mode for Basecamp OAuth
-  // Generate authorization URL (use standard redirect URI - don't modify it)
+  // Generate authorization URL - open popup directly to Basecamp OAuth
   const authUrl = getAuthorizationUrl(redirectUri, clientId, state);
   
-  // Commit session first to ensure cookie is set
+  // Commit session to ensure cookie is set
   const cookie = await commitSession(session);
-  
-  // Store state in URL as backup for popup windows (cookie might not be shared)
-  const redirectUrlWithState = `/auth/redirect?url=${encodeURIComponent(authUrl)}&state=${state}`;
   
   // Return auth URL for client-side popup handling
   return {
-    authUrl: redirectUrlWithState,
+    authUrl,
     usePopup: true,
     redirectTo,
     headers: {
@@ -92,20 +87,32 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
   const { authUrl, redirectTo } = loaderData;
 
   useEffect(() => {
-    // Open OAuth in popup window
-    // First open our auth redirect route which will set cookies, then redirect to Basecamp
-    const width = 600;
-    const height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
+    // Configure popup window features with proper centering
+    const features = {
+      width: 600,
+      height: 700,
+      top: "auto",
+      left: "auto",
+      toolbar: "no",
+      menubar: "no",
+      scrollbars: "yes",
+      resizable: "yes",
+    };
 
-    // authUrl already includes the redirect URL with state parameter
-    // Open it directly - it will go through /auth/redirect first
-    const popup = window.open(
-      authUrl,
-      "Basecamp OAuth",
-      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
-    );
+    const strFeatures = Object.entries(features).reduce((str, [key, value]) => {
+      if (value === "auto") {
+        if (key === "top") {
+          value = Math.round(window.innerHeight / 2 - features.height / 2);
+        }
+        if (key === "left") {
+          value = Math.round(window.innerWidth / 2 - features.width / 2);
+        }
+      }
+      return str + `${key}=${value},`;
+    }, "").slice(0, -1);
+
+    // Open popup directly to Basecamp OAuth URL
+    const popup = window.open(authUrl, "Basecamp OAuth", strFeatures);
 
     if (!popup) {
       alert("Please allow popups for this site to complete authentication.");
@@ -113,29 +120,61 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
       return;
     }
 
-    // Poll for popup to close or redirect
-    const checkClosed = setInterval(() => {
+    // Declare interval variable so it can be accessed in messageHandler
+    let checkClosed: NodeJS.Timeout;
+
+    // Listen for messages from popup callback
+    const messageHandler = async (event: MessageEvent) => {
+      // Only accept messages from our origin
+      if (event.origin !== window.location.origin) return;
+
+      const { code, state, error } = event.data;
+
+      if (error) {
+        clearInterval(checkClosed);
+        window.removeEventListener("message", messageHandler);
+        window.location.href = `/?error=${encodeURIComponent(error)}`;
+        return;
+      }
+
+      if (code && state) {
+        clearInterval(checkClosed);
+        window.removeEventListener("message", messageHandler);
+
+        try {
+          // Call exchange API endpoint to exchange code for tokens
+          const response = await fetch("/auth/exchange", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ code, state }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            // Redirect to destination after successful token exchange
+            window.location.href = data.redirectTo || "/";
+          } else {
+            window.location.href = `/?error=${encodeURIComponent(data.error || "Authentication failed")}`;
+          }
+        } catch (err) {
+          console.error("Failed to exchange authorization code:", err);
+          window.location.href = `/?error=${encodeURIComponent("Failed to exchange authorization code")}`;
+        }
+      }
+    };
+
+    // Poll for popup to close (fallback in case message isn't received)
+    checkClosed = setInterval(() => {
       if (popup.closed) {
         clearInterval(checkClosed);
-        // Redirect to home page - the callback will handle setting cookies
-        // Since cookies are set server-side, we can just reload
+        window.removeEventListener("message", messageHandler);
+        // Reload to check authentication status
         window.location.href = redirectTo || "/";
       }
     }, 500);
-
-    // Listen for messages from popup (if callback posts message)
-    const messageHandler = (event: MessageEvent) => {
-      // Only accept messages from our origin
-      if (event.origin !== window.location.origin) return;
-      
-      if (event.data.type === "oauth-complete") {
-        clearInterval(checkClosed);
-        window.removeEventListener("message", messageHandler);
-        // Don't close popup here - let the callback close it after redirect
-        // Don't redirect here - let the callback redirect the parent directly
-        // This prevents double redirects
-      }
-    };
 
     window.addEventListener("message", messageHandler);
 
