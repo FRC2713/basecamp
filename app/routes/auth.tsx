@@ -29,9 +29,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     session.set("oauthRedirect", redirectTo);
   }
 
-  // Generate authorization URL
-  const authUrl = getAuthorizationUrl(redirectUri, clientId, state);
-
   // Check if we're in an iframe (for Onshape apps)
   // If so, return the auth URL so client can open in popup
   const referer = request.headers.get("referer");
@@ -39,16 +36,18 @@ export async function loader({ request }: Route.LoaderArgs) {
   const usePopup = url.searchParams.get("popup") === "true" || isInIframe;
 
   if (usePopup) {
+    // Generate authorization URL (use standard redirect URI - don't modify it)
+    const authUrl = getAuthorizationUrl(redirectUri, clientId, state);
+    
     // Commit session first to ensure cookie is set
     const cookie = await commitSession(session);
     
     // Store state in URL as backup for popup windows (cookie might not be shared)
-    // Include state in the redirect URL so /auth/redirect can access it
     const redirectUrlWithState = `/auth/redirect?url=${encodeURIComponent(authUrl)}&state=${state}`;
     
     // Return auth URL for client-side popup handling
     return {
-      authUrl: redirectUrlWithState, // Changed: return our redirect URL instead
+      authUrl: redirectUrlWithState,
       usePopup: true,
       redirectTo,
       headers: {
@@ -56,6 +55,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
     };
   }
+
+  // Generate authorization URL (non-popup mode)
+  const authUrl = getAuthorizationUrl(redirectUri, clientId, state);
 
   // Redirect to Basecamp authorization page (non-iframe context)
   return redirect(authUrl, {
