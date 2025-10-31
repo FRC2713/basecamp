@@ -10,16 +10,22 @@ import { getSession, commitSession } from "~/lib/session";
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const targetUrl = url.searchParams.get("url");
+  const stateFromUrl = url.searchParams.get("state");
 
   if (!targetUrl) {
     return redirect("/?error=" + encodeURIComponent("Missing redirect URL"));
   }
 
   // Get session to ensure cookies are initialized in the popup window
-  // This ensures the popup has access to the same session cookies as the main window
   const session = await getSession(request);
   
-  // Commit session to ensure cookies are set (even if empty, this initializes the cookie)
+  // If state is passed in URL (from popup flow), ensure it's in the session
+  // This handles cases where cookies aren't shared between windows
+  if (stateFromUrl && !session.get("oauthState")) {
+    session.set("oauthState", stateFromUrl);
+  }
+  
+  // Commit session to ensure cookies are set
   const cookie = await commitSession(session);
   
   // Redirect to the OAuth provider

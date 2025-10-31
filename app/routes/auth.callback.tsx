@@ -21,8 +21,25 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
   const storedState = session.get("oauthState");
 
+  // Debug logging
+  console.error("OAuth callback state validation:", {
+    receivedState: state,
+    storedState: storedState,
+    hasSession: !!session,
+    sessionKeys: session ? Object.keys(session.data || {}) : [],
+    cookies: request.headers.get("cookie")?.substring(0, 100), // First 100 chars
+  });
+
   // Verify state to prevent CSRF attacks
   if (!state || state !== storedState) {
+    // If state doesn't match, it might be a cookie issue
+    // Check if we have a code but no stored state
+    if (code && !storedState) {
+      console.error("State missing from session - cookie may not be accessible in popup");
+      // Try to restart auth flow
+      await destroySession(session);
+      return redirect("/auth?popup=true");
+    }
     return redirect("/?error=" + encodeURIComponent("Invalid state parameter"));
   }
 

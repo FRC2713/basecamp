@@ -39,12 +39,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const usePopup = url.searchParams.get("popup") === "true" || isInIframe;
 
   if (usePopup) {
-    // Commit session first
+    // Commit session first to ensure cookie is set
     const cookie = await commitSession(session);
+    
+    // Store state in URL as backup for popup windows (cookie might not be shared)
+    // Include state in the redirect URL so /auth/redirect can access it
+    const redirectUrlWithState = `/auth/redirect?url=${encodeURIComponent(authUrl)}&state=${state}`;
     
     // Return auth URL for client-side popup handling
     return {
-      authUrl,
+      authUrl: redirectUrlWithState, // Changed: return our redirect URL instead
       usePopup: true,
       redirectTo,
       headers: {
@@ -77,11 +81,10 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
 
-    // Create a redirect URL that will set cookies then redirect to Basecamp
-    const redirectUrl = `/auth/redirect?url=${encodeURIComponent(authUrl)}`;
-    
+    // authUrl already includes the redirect URL with state parameter
+    // Open it directly - it will go through /auth/redirect first
     const popup = window.open(
-      redirectUrl,
+      authUrl,
       "Basecamp OAuth",
       `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
     );
