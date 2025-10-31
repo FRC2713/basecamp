@@ -48,6 +48,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     session.set("onshapeRefreshToken", tokenResponse.refresh_token);
     session.set("onshapeExpiresAt", Date.now() + tokenResponse.expires_in * 1000);
     session.unset("onshapeOauthState"); // Remove state after successful exchange
+    session.unset("onshapeAuthRedirectCount"); // Clear redirect counter on success
 
     // Redirect to home page
     return redirect("/", {

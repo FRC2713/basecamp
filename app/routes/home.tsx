@@ -18,13 +18,40 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Check Onshape authentication first (required)
   const onshapeAuthenticated = await isOnshapeAuthenticated(request);
   
+  // Get session once
+  const session = await getSession(request);
+  
   // If not authenticated with Onshape, redirect to Onshape auth
+  // Use a redirect counter to prevent infinite loops
   if (!onshapeAuthenticated) {
-    return redirect("/auth/onshape");
+    const redirectCount = session.get("onshapeAuthRedirectCount") || 0;
+    
+    if (redirectCount < 2) {
+      // Allow up to 2 redirects to handle OAuth flow
+      session.set("onshapeAuthRedirectCount", redirectCount + 1);
+      return redirect("/auth/onshape", {
+        headers: {
+          "Set-Cookie": await commitSession(session),
+        },
+      });
+    } else {
+      // Too many redirects - clear counter and show error
+      session.unset("onshapeAuthRedirectCount");
+      return {
+        onshapeAuthenticated: false,
+        basecampAuthenticated: false,
+        error: "Unable to authenticate with Onshape. Please refresh the page or try opening in a new window.",
+        headers: {
+          "Set-Cookie": await commitSession(session),
+        },
+      };
+    }
   }
+  
+  // Clear redirect counter if authenticated
+  session.unset("onshapeAuthRedirectCount");
 
   // Refresh tokens if needed (this updates the session)
-  const session = await getSession(request);
   try {
     await refreshOnshapeTokenIfNeededWithSession(session);
     await refreshBasecampTokenIfNeededWithSession(session);
