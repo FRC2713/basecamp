@@ -21,14 +21,25 @@ export interface OnshapeAuthState {
 
 /**
  * Generate authorization URL for Onshape OAuth flow
+ * 
+ * Note: Onshape may derive scopes from your app registration in their developer portal.
+ * If you get "invalid_scope" errors, try omitting the scope parameter entirely
+ * or check what scopes are configured in your Onshape app registration.
  */
 export function getAuthorizationUrl(redirectUri: string, clientId: string, state?: string): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: "OAuth2ReadUserInfo OAuth2ReadDocuments", // Request necessary scopes
   });
+
+  // Onshape scopes are configured in the app registration.
+  // Only include scope parameter if explicitly set in environment variable.
+  // If omitted, Onshape will use the scopes from your app registration.
+  const scope = process.env.ONSHAPE_SCOPE;
+  if (scope) {
+    params.append("scope", scope);
+  }
 
   if (state) {
     params.append("state", state);
