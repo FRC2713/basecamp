@@ -71,13 +71,17 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     // Open OAuth in popup window
+    // First open our auth redirect route which will set cookies, then redirect to Basecamp
     const width = 600;
     const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
 
+    // Create a redirect URL that will set cookies then redirect to Basecamp
+    const redirectUrl = `/auth/redirect?url=${encodeURIComponent(authUrl)}`;
+    
     const popup = window.open(
-      authUrl,
+      redirectUrl,
       "Basecamp OAuth",
       `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
     );
