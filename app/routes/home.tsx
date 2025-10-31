@@ -194,7 +194,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     Connect Basecamp to create cards from Onshape documents.
                   </p>
                   <Button asChild size="sm" className="w-full">
-                    <Link to="/auth?popup=true">
+                    <Link to="/auth">
                       <LogIn className="h-4 w-4 mr-2" />
                       Connect Basecamp
                     </Link>

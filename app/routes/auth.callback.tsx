@@ -118,12 +118,19 @@ export default function AuthCallback({ loaderData }: Route.ComponentProps) {
     if (loaderData.success) {
       // Success - send message to parent if in popup, otherwise redirect
       if (isPopup && window.opener) {
+        // Post message to notify parent
         window.opener.postMessage(
           { type: "oauth-complete", success: true },
           window.location.origin
         );
-        // Close popup after a brief delay
-        setTimeout(() => window.close(), 500);
+        // Redirect parent window directly to ensure cookie is available
+        // Add a small delay to ensure cookie is committed
+        setTimeout(() => {
+          if (window.opener && !window.opener.closed) {
+            window.opener.location.href = loaderData.redirectTo || "/";
+          }
+          window.close();
+        }, 300);
       } else {
         // Not in popup - redirect normally
         window.location.href = loaderData.redirectTo || "/";

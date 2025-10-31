@@ -98,7 +98,11 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
         popup.close();
         clearInterval(checkClosed);
         window.removeEventListener("message", messageHandler);
-        window.location.href = redirectTo || "/";
+        // Force a full page reload to ensure session cookie is read
+        // Use a small delay to ensure popup cookie is committed
+        setTimeout(() => {
+          window.location.href = redirectTo || "/";
+        }, 100);
       }
     };
 
