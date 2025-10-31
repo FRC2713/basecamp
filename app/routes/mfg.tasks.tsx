@@ -1,6 +1,7 @@
 import type { Route } from "./+types/mfg.tasks";
 import { redirect } from "react-router";
-import { getSession } from "~/lib/session";
+import { getSession, isBasecampAuthenticated, isOnshapeAuthenticated, commitSession } from "~/lib/session";
+import { refreshBasecampTokenIfNeededWithSession } from "~/lib/tokenRefresh";
 import { BasecampClient } from "~/lib/basecampApi/client";
 import { getCardTable, type CardTableColumn } from "~/lib/basecampApi/cardTables";
 import { getAllCardsInColumn, createCardTableCard } from "~/lib/basecampApi/cardTableCards";
@@ -33,12 +34,33 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
-  const accessToken = session.get("accessToken");
-
-  // Redirect to home if not authenticated
-  if (!accessToken) {
-    return redirect("/?error=" + encodeURIComponent("Please authenticate first"));
+  
+  // Check Onshape authentication first (required)
+  const onshapeAuthenticated = await isOnshapeAuthenticated(request);
+  if (!onshapeAuthenticated) {
+    return redirect("/auth/onshape");
   }
+
+  // Check Basecamp authentication (required for this route)
+  const basecampAuthenticated = await isBasecampAuthenticated(request);
+  if (!basecampAuthenticated) {
+    return redirect("/auth?redirect=/mfg/tasks");
+  }
+
+  // Refresh tokens if needed
+  try {
+    await refreshBasecampTokenIfNeededWithSession(session);
+  } catch (error) {
+    console.error("Token refresh failed:", error);
+  }
+
+  const accessToken = session.get("accessToken");
+  if (!accessToken) {
+    return redirect("/auth?redirect=/mfg/tasks");
+  }
+
+  // Commit session after potential token refresh
+  const cookie = await commitSession(session);
 
   // Get account ID from session or environment variable
   // Note: The account ID must match the one in your Basecamp URL
@@ -209,6 +231,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       columns: columns || [],
       triageColumnId: triageColumn?.id ? String(triageColumn.id) : null,
       error: null,
+      headers: {
+        "Set-Cookie": cookie,
+      },
     };
   } catch (error: unknown) {
     console.error("Unexpected error fetching card table cards:", error);
@@ -229,11 +254,28 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const session = await getSession(request);
-  const accessToken = session.get("accessToken");
-
-  if (!accessToken) {
-    return { success: false, error: "Not authenticated" };
+  
+  // Check Basecamp authentication
+  const basecampAuthenticated = await isBasecampAuthenticated(request);
+  if (!basecampAuthenticated) {
+    return { success: false, error: "Please authenticate with Basecamp first", redirect: "/auth" };
   }
+
+  // Refresh token if needed
+  try {
+    await refreshBasecampTokenIfNeededWithSession(session);
+  } catch (error) {
+    console.error("Token refresh failed:", error);
+    return { success: false, error: "Token refresh failed. Please re-authenticate.", redirect: "/auth" };
+  }
+
+  const accessToken = session.get("accessToken");
+  if (!accessToken) {
+    return { success: false, error: "Not authenticated", redirect: "/auth" };
+  }
+
+  // Commit session after potential token refresh
+  const cookie = await commitSession(session);
 
   const sessionAccountId = session.get("accountId");
   const envAccountId = process.env.BASECAMP_ACCOUNT_ID;
@@ -288,7 +330,13 @@ export async function action({ request }: Route.ActionArgs) {
       description: description || undefined,
     });
 
-    return { success: true, card: response.data };
+    return { 
+      success: true, 
+      card: response.data,
+      headers: {
+        "Set-Cookie": cookie,
+      },
+    };
   } catch (error: unknown) {
     const errorMessage = error && typeof error === "object" && "message" in error
       ? String(error.message)

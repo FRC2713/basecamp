@@ -3,8 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Sparkles, Rocket, BookOpen, Code2, LogIn, LogOut, CheckCircle2 } from "lucide-react";
-import { Link, useSearchParams } from "react-router";
-import { getSession } from "~/lib/session";
+import { Link, useSearchParams, redirect } from "react-router";
+import { isOnshapeAuthenticated, isBasecampAuthenticated, getSession, commitSession } from "~/lib/session";
+import { refreshOnshapeTokenIfNeededWithSession, refreshBasecampTokenIfNeededWithSession } from "~/lib/tokenRefresh";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -14,16 +15,41 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  // Check Onshape authentication first (required)
+  const onshapeAuthenticated = await isOnshapeAuthenticated(request);
+  
+  // If not authenticated with Onshape, redirect to Onshape auth
+  if (!onshapeAuthenticated) {
+    return redirect("/auth/onshape");
+  }
+
+  // Refresh tokens if needed (this updates the session)
   const session = await getSession(request);
-  const accessToken = session.get("accessToken");
+  try {
+    await refreshOnshapeTokenIfNeededWithSession(session);
+    await refreshBasecampTokenIfNeededWithSession(session);
+  } catch (error) {
+    // If refresh fails, clear tokens and redirect to auth
+    console.error("Token refresh failed:", error);
+  }
+
+  // Check Basecamp authentication (optional, for creating cards)
+  const basecampAuthenticated = await isBasecampAuthenticated(request);
+  
+  // Commit session after potential token refresh
+  const cookie = await commitSession(session);
   
   return {
-    isAuthenticated: !!accessToken,
+    onshapeAuthenticated: true,
+    basecampAuthenticated,
+    headers: {
+      "Set-Cookie": cookie,
+    },
   };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { isAuthenticated } = loaderData;
+  const { onshapeAuthenticated, basecampAuthenticated } = loaderData;
   const [searchParams] = useSearchParams();
   const error = searchParams.get("error");
 
@@ -43,10 +69,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <Badge variant="secondary">React Router v7</Badge>
             <Badge variant="secondary">shadcn/ui</Badge>
             <Badge variant="secondary">Tailwind CSS</Badge>
-            {isAuthenticated && (
+            {onshapeAuthenticated && (
               <Badge variant="default" className="gap-1">
                 <CheckCircle2 className="h-3 w-3" />
-                Authenticated
+                Onshape Connected
+              </Badge>
+            )}
+            {basecampAuthenticated && (
+              <Badge variant="default" className="gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                Basecamp Connected
               </Badge>
             )}
           </div>
@@ -68,32 +100,63 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <CardHeader>
             <CardTitle>Authentication Status</CardTitle>
             <CardDescription>
-              {isAuthenticated
-                ? "You are connected to Basecamp"
-                : "Connect your Basecamp account to get started"}
+              Manage connections to Onshape and Basecamp
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            {isAuthenticated ? (
-              <div className="flex flex-col gap-4">
-                <p className="text-sm text-muted-foreground">
-                  You are successfully authenticated with Basecamp. You can now access the API.
-                </p>
-                <Button asChild variant="outline">
-                  <Link to="/auth/logout">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Logout
-                  </Link>
-                </Button>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Onshape</span>
+                  {onshapeAuthenticated ? (
+                    <Badge variant="default" className="gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">Not Connected</Badge>
+                  )}
+                </div>
               </div>
-            ) : (
-              <Button asChild className="w-full">
-                <Link to="/auth">
-                  <LogIn className="h-4 w-4 mr-2" />
-                  Login with Basecamp
-                </Link>
-              </Button>
-            )}
+              {onshapeAuthenticated && (
+                <p className="text-xs text-muted-foreground">
+                  Successfully authenticated with Onshape. You can access Onshape document data.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Basecamp</span>
+                  {basecampAuthenticated ? (
+                    <Badge variant="default" className="gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Connected
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">Not Connected</Badge>
+                  )}
+                </div>
+              </div>
+              {basecampAuthenticated ? (
+                <p className="text-xs text-muted-foreground">
+                  Successfully authenticated with Basecamp. You can create cards in Basecamp.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Connect Basecamp to create cards from Onshape documents.
+                  </p>
+                  <Button asChild size="sm" className="w-full">
+                    <Link to="/auth">
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Connect Basecamp
+                    </Link>
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

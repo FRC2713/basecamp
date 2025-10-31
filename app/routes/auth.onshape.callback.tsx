@@ -1,6 +1,6 @@
-import type { Route } from "./+types/auth.callback";
+import type { Route } from "./+types/auth.onshape.callback";
 import { redirect } from "react-router";
-import { exchangeCodeForToken } from "~/lib/basecampApi/auth";
+import { exchangeCodeForToken } from "~/lib/onshapeApi/auth";
 import { getSession, commitSession, destroySession } from "~/lib/session";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -19,19 +19,19 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const session = await getSession(request);
-  const storedState = session.get("oauthState");
+  const storedState = session.get("onshapeOauthState");
 
   // Verify state to prevent CSRF attacks
   if (!state || state !== storedState) {
     return redirect("/?error=" + encodeURIComponent("Invalid state parameter"));
   }
 
-  const clientId = process.env.BASECAMP_CLIENT_ID;
-  const clientSecret = process.env.BASECAMP_CLIENT_SECRET;
-  const redirectUri = process.env.BASECAMP_REDIRECT_URI;
+  const clientId = process.env.ONSHAPE_CLIENT_ID;
+  const clientSecret = process.env.ONSHAPE_CLIENT_SECRET;
+  const redirectUri = process.env.ONSHAPE_REDIRECT_URI;
 
   if (!clientId || !clientSecret || !redirectUri) {
-    throw new Error("Missing Basecamp OAuth environment variables");
+    throw new Error("Missing Onshape OAuth environment variables");
   }
 
   try {
@@ -44,17 +44,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     );
 
     // Store tokens in session
-    session.set("accessToken", tokenResponse.access_token);
-    session.set("refreshToken", tokenResponse.refresh_token);
-    session.set("expiresAt", Date.now() + tokenResponse.expires_in * 1000);
-    
-    // Get redirect destination if stored
-    const redirectTo = session.get("oauthRedirect") || "/";
-    session.unset("oauthState"); // Remove state after successful exchange
-    session.unset("oauthRedirect"); // Remove redirect after use
+    session.set("onshapeAccessToken", tokenResponse.access_token);
+    session.set("onshapeRefreshToken", tokenResponse.refresh_token);
+    session.set("onshapeExpiresAt", Date.now() + tokenResponse.expires_in * 1000);
+    session.unset("onshapeOauthState"); // Remove state after successful exchange
 
-    // Redirect to intended destination or home page
-    return redirect(redirectTo, {
+    // Redirect to home page
+    return redirect("/", {
       headers: {
         "Set-Cookie": await commitSession(session),
       },

@@ -6,10 +6,12 @@ import { randomBytes } from "node:crypto";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
+  const url = new URL(request.url);
+  const redirectTo = url.searchParams.get("redirect") || "/";
   
   // Check if already authenticated
   if (session.get("accessToken")) {
-    return redirect("/");
+    return redirect(redirectTo);
   }
 
   const clientId = process.env.BASECAMP_CLIENT_ID;
@@ -19,9 +21,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw new Error("Missing BASECAMP_CLIENT_ID or BASECAMP_REDIRECT_URI environment variables");
   }
 
-  // Generate state for CSRF protection
+  // Generate state for CSRF protection (include redirect in state)
   const state = randomBytes(32).toString("hex");
   session.set("oauthState", state);
+  if (redirectTo !== "/") {
+    session.set("oauthRedirect", redirectTo);
+  }
 
   // Generate authorization URL
   const authUrl = getAuthorizationUrl(redirectUri, clientId, state);
