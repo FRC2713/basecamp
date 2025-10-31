@@ -2,7 +2,7 @@ import type { Route } from "./+types/auth";
 import { redirect } from "react-router";
 import { getAuthorizationUrl } from "~/lib/basecampApi/auth";
 import { getSession, commitSession } from "~/lib/session";
-import { randomBytes } from "crypto";
+import { randomBytes } from "node:crypto";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
