@@ -50,6 +50,11 @@ export interface OnshapePart {
   isHidden?: boolean;
   isMesh?: boolean;
   microversionId?: string;
+  thumbnail?: {
+    href?: string;
+    [key: string]: unknown; // Allow other thumbnail properties
+  };
+  [key: string]: unknown; // Allow other properties from API response
 }
 
 /**
@@ -167,6 +172,18 @@ export class OnshapeClient {
       return response;
     }
     return (response as { parts: OnshapePart[] }).parts || [];
+  }
+
+  /**
+   * Generate a thumbnail for an element
+   * @param did Document ID
+   * @param wvm Workspace/Version/Microversion type ("w" for workspace, "v" for version, "m" for microversion)
+   * @param wvmid Workspace/Version/Microversion ID
+   * @param eid Element ID
+   */
+  async generateThumbnail(did: string, wvm: string, wvmid: string, eid: string): Promise<void> {
+    const endpoint = `/thumbnails/d/${did}/${wvm}/${wvmid}/e/${eid}`;
+    await this.post(endpoint);
   }
 }
 

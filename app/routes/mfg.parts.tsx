@@ -6,6 +6,80 @@ import type { OnshapePart } from "~/lib/onshapeApi/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { AlertCircle, Box } from "lucide-react";
+import { useState } from "react";
+
+/**
+ * Component to display a single part with thumbnail error handling
+ */
+function PartCard({ part }: { part: OnshapePart }) {
+  const thumbnailHref = part.thumbnail?.href;
+  const [thumbnailError, setThumbnailError] = useState(false);
+
+  return (
+    <Card className="hover:shadow-lg transition-shadow">
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <CardTitle className="text-lg">
+            {part.name || `Part ${part.partId}`}
+          </CardTitle>
+          {part.isHidden && (
+            <Badge variant="secondary">Hidden</Badge>
+          )}
+        </div>
+        {part.name && (
+          <CardDescription>
+            Part ID: <code className="text-xs">{part.partId}</code>
+          </CardDescription>
+        )}
+        {thumbnailHref && !thumbnailError && (
+          <div className="mt-2">
+            <img
+              src={thumbnailHref}
+              alt={`Thumbnail for ${part.name || part.partId}`}
+              className="w-full h-auto rounded border"
+              onError={() => setThumbnailError(true)}
+              style={{ maxHeight: '200px', objectFit: 'contain' }}
+            />
+          </div>
+        )}
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2 text-sm text-muted-foreground">
+          {part.bodyType && (
+            <div>
+              <span className="font-semibold">Body Type:</span>{" "}
+              <Badge variant="outline">{part.bodyType}</Badge>
+            </div>
+          )}
+          {part.isMesh !== undefined && (
+            <div>
+              <span className="font-semibold">Type:</span>{" "}
+              {part.isMesh ? "Mesh" : "Solid"}
+            </div>
+          )}
+          {part.appearance && (
+            <div>
+              <span className="font-semibold">Appearance:</span>{" "}
+              {part.appearance.color && (
+                <span className="inline-block w-4 h-4 rounded border border-gray-300 ml-1 align-middle" 
+                      style={{
+                        backgroundColor: `rgba(${part.appearance.color[0]}, ${part.appearance.color[1]}, ${part.appearance.color[2]}, ${part.appearance.opacity ?? part.appearance.color[3] ?? 1})`
+                      }}
+                />
+              )}
+            </div>
+          )}
+          {part.microversionId && (
+            <div className="text-xs">
+              <span className="font-semibold">Microversion:</span>{" "}
+              <code className="bg-muted px-1 rounded">{part.microversionId}</code>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -207,57 +281,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
             <h2 className="text-xl font-semibold mb-4">Parts</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {parts.map((part) => (
-                <Card key={part.partId} className="hover:shadow-lg transition-shadow">
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg">
-                        {part.name || `Part ${part.partId}`}
-                      </CardTitle>
-                      {part.isHidden && (
-                        <Badge variant="secondary">Hidden</Badge>
-                      )}
-                    </div>
-                    {part.name && (
-                      <CardDescription>
-                        Part ID: <code className="text-xs">{part.partId}</code>
-                      </CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm text-muted-foreground">
-                      {part.bodyType && (
-                        <div>
-                          <span className="font-semibold">Body Type:</span>{" "}
-                          <Badge variant="outline">{part.bodyType}</Badge>
-                        </div>
-                      )}
-                      {part.isMesh !== undefined && (
-                        <div>
-                          <span className="font-semibold">Type:</span>{" "}
-                          {part.isMesh ? "Mesh" : "Solid"}
-                        </div>
-                      )}
-                      {part.appearance && (
-                        <div>
-                          <span className="font-semibold">Appearance:</span>{" "}
-                          {part.appearance.color && (
-                            <span className="inline-block w-4 h-4 rounded border border-gray-300 ml-1 align-middle" 
-                                  style={{
-                                    backgroundColor: `rgba(${part.appearance.color[0]}, ${part.appearance.color[1]}, ${part.appearance.color[2]}, ${part.appearance.opacity ?? part.appearance.color[3] ?? 1})`
-                                  }}
-                            />
-                          )}
-                        </div>
-                      )}
-                      {part.microversionId && (
-                        <div className="text-xs">
-                          <span className="font-semibold">Microversion:</span>{" "}
-                          <code className="bg-muted px-1 rounded">{part.microversionId}</code>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                <PartCard key={part.partId} part={part} />
               ))}
             </div>
           </div>
