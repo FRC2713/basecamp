@@ -14,5 +14,6 @@ export default [
     index("routes/home.tsx"),
     route("projects", "routes/projects.tsx"),
     route("mfg/tasks", "routes/mfg.tasks.tsx"),
+    route("mfg/parts", "routes/mfg.parts.tsx"),
   ]),
 ] satisfies RouteConfig;

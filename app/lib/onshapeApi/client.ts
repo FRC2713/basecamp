@@ -39,6 +39,19 @@ export interface OnshapeError {
   reason?: string;
 }
 
+export interface OnshapePart {
+  partId: string;
+  name?: string;
+  bodyType?: string;
+  appearance?: {
+    color?: [number, number, number, number];
+    opacity?: number;
+  };
+  isHidden?: boolean;
+  isMesh?: boolean;
+  microversionId?: string;
+}
+
 /**
  * Onshape API Client
  */
@@ -137,6 +150,23 @@ export class OnshapeClient {
   async getDocuments(): Promise<OnshapeDocument[]> {
     const response = await this.get<{ items: OnshapeDocument[] }>("/documents");
     return response.items || [];
+  }
+
+  /**
+   * Get all parts from a Part Studio
+   * @param did Document ID
+   * @param wvm Workspace/Version/Microversion type ("w" for workspace, "v" for version, "m" for microversion)
+   * @param wvmid Workspace/Version/Microversion ID
+   * @param eid Element ID (Part Studio element)
+   */
+  async getParts(did: string, wvm: string, wvmid: string, eid: string): Promise<OnshapePart[]> {
+    const endpoint = `/partstudios/d/${did}/${wvm}/${wvmid}/e/${eid}/parts`;
+    const response = await this.get<OnshapePart[] | { parts: OnshapePart[] }>(endpoint);
+    // Handle both response formats: direct array or wrapped in { parts: [...] }
+    if (Array.isArray(response)) {
+      return response;
+    }
+    return (response as { parts: OnshapePart[] }).parts || [];
   }
 }
 
