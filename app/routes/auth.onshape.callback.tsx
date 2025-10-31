@@ -23,7 +23,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Verify state to prevent CSRF attacks
   if (!state || state !== storedState) {
-    return redirect("/?error=" + encodeURIComponent("Invalid state parameter"));
+    console.error("State validation failed:", {
+      receivedState: state,
+      storedState: storedState,
+      hasSession: !!session,
+      sessionKeys: session ? Object.keys(session.data || {}) : [],
+    });
+    
+    // If state doesn't match but we have a code, it might be a session issue
+    // Don't redirect to error immediately - try to clear and restart auth
+    if (code && !storedState) {
+      // Session was lost - clear everything and redirect to auth start
+      await destroySession(session);
+      return redirect("/auth/onshape");
+    }
+    
+    return redirect("/?error=" + encodeURIComponent("Invalid state parameter. Please try again."));
   }
 
   const clientId = process.env.ONSHAPE_CLIENT_ID;

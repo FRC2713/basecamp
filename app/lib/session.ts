@@ -8,9 +8,11 @@ const sessionStorage = createCookieSessionStorage({
     httpOnly: true,
     maxAge: 60 * 60 * 24 * 30, // 30 days
     path: "/",
-    sameSite: "lax", // Changed from "strict" to "lax" to allow cookies in iframe redirects
+    // For OAuth flows with cross-origin redirects (especially in iframes),
+    // we need sameSite: "none" and secure: true
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     secrets: [process.env.SESSION_SECRET || "basecamp-session-secret-change-in-production"],
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.NODE_ENV === "production", // Must be true when sameSite is "none"
   },
 });
 

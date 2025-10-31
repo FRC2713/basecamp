@@ -15,11 +15,28 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const url = new URL(request.url);
+  const hasError = url.searchParams.has("error");
+  
   // Check Onshape authentication first (required)
   const onshapeAuthenticated = await isOnshapeAuthenticated(request);
   
   // Get session once
   const session = await getSession(request);
+  
+  // If there's an error in the URL, don't redirect - let the page render with the error
+  // This prevents redirect loops when OAuth callbacks fail
+  if (hasError) {
+    session.unset("onshapeAuthRedirectCount"); // Clear redirect counter
+    return {
+      onshapeAuthenticated: false,
+      basecampAuthenticated: await isBasecampAuthenticated(request),
+      error: url.searchParams.get("error") || undefined,
+      headers: {
+        "Set-Cookie": await commitSession(session),
+      },
+    };
+  }
   
   // If not authenticated with Onshape, redirect to Onshape auth
   // Use a redirect counter to prevent infinite loops
@@ -76,9 +93,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { onshapeAuthenticated, basecampAuthenticated } = loaderData;
+  const { onshapeAuthenticated, basecampAuthenticated, error: loaderError } = loaderData;
   const [searchParams] = useSearchParams();
-  const error = searchParams.get("error");
+  const urlError = searchParams.get("error");
+  const error = loaderError || urlError;
 
   return (
     <main className="flex min-h-screen items-center justify-center p-4">
