@@ -44,7 +44,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Check Basecamp authentication (required for this route)
   const basecampAuthenticated = await isBasecampAuthenticated(request);
   if (!basecampAuthenticated) {
-    return redirect("/auth?redirect=/mfg/tasks");
+    // Check if we're in an iframe (Onshape context)
+    const referer = request.headers.get("referer");
+    const isInIframe = referer?.includes("onshape.com") || referer?.includes("onshape.io");
+    const authUrl = isInIframe 
+      ? "/auth?redirect=/mfg/tasks&popup=true"
+      : "/auth?redirect=/mfg/tasks";
+    return redirect(authUrl);
   }
 
   // Refresh tokens if needed
@@ -56,7 +62,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const accessToken = session.get("accessToken");
   if (!accessToken) {
-    return redirect("/auth?redirect=/mfg/tasks");
+    // Check if we're in an iframe (Onshape context)
+    const referer = request.headers.get("referer");
+    const isInIframe = referer?.includes("onshape.com") || referer?.includes("onshape.io");
+    const authUrl = isInIframe 
+      ? "/auth?redirect=/mfg/tasks&popup=true"
+      : "/auth?redirect=/mfg/tasks";
+    return redirect(authUrl);
   }
 
   // Commit session after potential token refresh
@@ -258,7 +270,11 @@ export async function action({ request }: Route.ActionArgs) {
   // Check Basecamp authentication
   const basecampAuthenticated = await isBasecampAuthenticated(request);
   if (!basecampAuthenticated) {
-    return { success: false, error: "Please authenticate with Basecamp first", redirect: "/auth" };
+    // Check if we're in an iframe (Onshape context)
+    const referer = request.headers.get("referer");
+    const isInIframe = referer?.includes("onshape.com") || referer?.includes("onshape.io");
+    const authUrl = isInIframe ? "/auth?popup=true" : "/auth";
+    return { success: false, error: "Please authenticate with Basecamp first", redirect: authUrl };
   }
 
   // Refresh token if needed
@@ -266,12 +282,18 @@ export async function action({ request }: Route.ActionArgs) {
     await refreshBasecampTokenIfNeededWithSession(session);
   } catch (error) {
     console.error("Token refresh failed:", error);
-    return { success: false, error: "Token refresh failed. Please re-authenticate.", redirect: "/auth" };
+    const referer = request.headers.get("referer");
+    const isInIframe = referer?.includes("onshape.com") || referer?.includes("onshape.io");
+    const authUrl = isInIframe ? "/auth?popup=true" : "/auth";
+    return { success: false, error: "Token refresh failed. Please re-authenticate.", redirect: authUrl };
   }
 
   const accessToken = session.get("accessToken");
   if (!accessToken) {
-    return { success: false, error: "Not authenticated", redirect: "/auth" };
+    const referer = request.headers.get("referer");
+    const isInIframe = referer?.includes("onshape.com") || referer?.includes("onshape.io");
+    const authUrl = isInIframe ? "/auth?popup=true" : "/auth";
+    return { success: false, error: "Not authenticated", redirect: authUrl };
   }
 
   // Commit session after potential token refresh

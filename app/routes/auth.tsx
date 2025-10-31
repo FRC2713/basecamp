@@ -4,6 +4,7 @@ import { getAuthorizationUrl } from "~/lib/basecampApi/auth";
 import { getSession, commitSession } from "~/lib/session";
 import { randomBytes } from "node:crypto";
 import { useEffect } from "react";
+import { isInIframe } from "~/lib/utils";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
@@ -32,8 +33,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   // Check if we're in an iframe (for Onshape apps)
   // If so, return the auth URL so client can open in popup
   const referer = request.headers.get("referer");
-  const isInIframe = referer?.includes("onshape.com") || referer?.includes("onshape.io");
-  const usePopup = url.searchParams.get("popup") === "true" || isInIframe;
+  
+  // Check referer for Onshape domains
+  const isInIframeFromReferer = referer?.includes("onshape.com") || referer?.includes("onshape.io");
+  
+  // Also check if popup param is explicitly set
+  const popupParam = url.searchParams.get("popup") === "true";
+  
+  // Use popup mode if explicitly requested via query param or if referer indicates Onshape iframe
+  const usePopup = popupParam || isInIframeFromReferer;
 
   if (usePopup) {
     // Generate authorization URL (use standard redirect URI - don't modify it)
@@ -69,6 +77,19 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function Auth({ loaderData }: Route.ComponentProps) {
   // If loaderData is undefined, it means we redirected (non-iframe case)
+  // However, if we're actually in an iframe but server didn't detect it,
+  // we need to handle it client-side
+  useEffect(() => {
+    // Client-side fallback: if we're in an iframe but server didn't trigger popup mode,
+    // redirect back with popup=true
+    if (!loaderData?.usePopup && isInIframe()) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("popup", "true");
+      window.location.href = url.toString();
+      return;
+    }
+  }, [loaderData]);
+
   if (!loaderData || !loaderData.usePopup) {
     return null; // Shouldn't render - already redirected
   }
