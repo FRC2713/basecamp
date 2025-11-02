@@ -3,7 +3,7 @@
  */
 
 import type { BasecampClient } from "~/lib/basecampApi/client";
-import { updateCardTableCard } from "~/lib/basecampApi/cardTableCards";
+import { updateCardTableCard, getCardTableCard } from "~/lib/basecampApi/cardTableCards";
 import { createAttachment } from "~/lib/basecampApi/attachments";
 import { getPartsWmve } from "~/lib/onshapeApi/generated-wrapper";
 import type { Client } from "~/lib/onshapeApi/generated/client/types.gen";
@@ -39,6 +39,16 @@ export async function updateCardContentWithThumbnail(
   onshapeAccessToken: string
 ): Promise<void> {
   try {
+    // First, get the current card to preserve existing fields like due_on
+    let currentCard;
+    try {
+      const cardResponse = await getCardTableCard(basecampClient, projectId, cardId);
+      currentCard = cardResponse.data;
+    } catch (error) {
+      console.warn(`[CardContent] Failed to fetch current card data:`, error);
+      // Continue anyway - we'll update without preserving due_on
+    }
+
     // Fetch parts from Onshape to get the specific part
     const partsResponse = await getPartsWmve({
       client: onshapeClient,
@@ -62,9 +72,10 @@ export async function updateCardContentWithThumbnail(
 
     if (!part) {
       console.warn(`[CardContent] Part not found: ${partMetadata.partId}`);
-      // Update content with empty string as per plan (option b)
+      // Update content with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
         content: "",
+        ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
     }
@@ -77,9 +88,10 @@ export async function updateCardContentWithThumbnail(
 
     if (!thumbnailUrl) {
       console.warn(`[CardContent] No thumbnail URL found for part ${partMetadata.partId}`);
-      // Update content with empty string as per plan (option b)
+      // Update content with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
         content: "",
+        ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
     }
@@ -93,9 +105,10 @@ export async function updateCardContentWithThumbnail(
 
     if (!thumbnailResponse.ok) {
       console.warn(`[CardContent] Failed to fetch thumbnail: ${thumbnailResponse.status}`);
-      // Update content with empty string as per plan (option b)
+      // Update content with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
         content: "",
+        ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
     }
@@ -126,17 +139,29 @@ export async function updateCardContentWithThumbnail(
     const content = `<bc-attachment sgid="${attachableSgid}"></bc-attachment>`;
 
     // Update card's content field (replaces existing content entirely)
+    // Preserve due_on field if it exists
     await updateCardTableCard(basecampClient, projectId, cardId, {
       content,
+      ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
     });
 
     console.log(`[CardContent] Successfully updated card ${cardId} with thumbnail attachment`);
   } catch (error) {
     console.warn(`[CardContent] Failed to update card content with thumbnail:`, error);
     // Update content with empty string on failure as per plan (option b)
+    // Try to preserve due_on if we can fetch the current card
     try {
+      let currentCard;
+      try {
+        const cardResponse = await getCardTableCard(basecampClient, projectId, cardId);
+        currentCard = cardResponse.data;
+      } catch {
+        // If we can't fetch the card, continue without preserving due_on
+      }
+      
       await updateCardTableCard(basecampClient, projectId, cardId, {
         content: "",
+        ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
     } catch (updateError) {
       console.error(`[CardContent] Failed to clear card content on error:`, updateError);
