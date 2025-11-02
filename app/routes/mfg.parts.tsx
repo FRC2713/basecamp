@@ -337,6 +337,11 @@ function PartCard({
       )}
       <CardContent className="space-y-4">
         <PartMfgState part={part} cards={cards} columns={columns} />
+        {backgroundColor && (
+          <p className="text-xs text-muted-foreground font-mono">
+            Debug: Column Color = {backgroundColor}
+          </p>
+        )}
       </CardContent>
     </Card>
   );
