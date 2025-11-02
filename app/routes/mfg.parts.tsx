@@ -1,7 +1,7 @@
 import type { Route } from "./+types/mfg.parts";
-import { redirect, useNavigation } from "react-router";
+import { redirect, useNavigation, useFetcher, useRevalidator } from "react-router";
 import { isOnshapeAuthenticated } from "~/lib/session";
-import { createOnshapeApiClient, getPartsWmve, getElementsInDocument, type BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
+import { createOnshapeApiClient, getPartsWmve, getElementsInDocument, getWmvepMetadata, updateWvepMetadata, type BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -12,9 +12,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Skeleton } from "~/components/ui/skeleton";
 import { AlertCircle, Box, Code } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 /**
  * Skeleton component for PartCard loading state
@@ -42,7 +44,7 @@ function PartCardSkeleton() {
 /**
  * Component to display a single part with thumbnail error handling
  */
-function PartCard({ part }: { part: BtPartMetadataInfo }) {
+function PartCard({ part, queryParams }: { part: BtPartMetadataInfo; queryParams: { documentId: string | null; instanceType: string; instanceId: string | null; elementId: string | null; elementType?: string | null } }) {
   // Always prefer 300x300 thumbnail from sizes array
   // The main href is just a JSON link, not an image
   const rawThumbnailUrl = part.thumbnailInfo?.sizes?.find(s => s.size === "300x300")?.href ||
@@ -56,7 +58,18 @@ function PartCard({ part }: { part: BtPartMetadataInfo }) {
   
   const [thumbnailError, setThumbnailError] = useState(false);
   const [isJsonDialogOpen, setIsJsonDialogOpen] = useState(false);
+  const [partNumberInput, setPartNumberInput] = useState("");
+  const fetcher = useFetcher();
+  const revalidator = useRevalidator();
   const jsonString = JSON.stringify(part, null, 2);
+
+  // Handle successful part number update
+  useEffect(() => {
+    if (fetcher.data?.success) {
+      setPartNumberInput("");
+      revalidator.revalidate();
+    }
+  }, [fetcher.data, revalidator]);
 
   return (
     <Card className="hover:shadow-lg transition-shadow">
@@ -92,7 +105,44 @@ function PartCard({ part }: { part: BtPartMetadataInfo }) {
           </div>
         </div>
         <CardDescription>
-          Part Number: <code className="text-xs">{part.partNumber || ""}</code>
+          {part.partNumber ? (
+            <>Part Number: <code className="text-xs">{part.partNumber}</code></>
+          ) : queryParams.documentId && queryParams.instanceId && queryParams.elementId ? (
+            <div className="space-y-2">
+              <Label htmlFor={`part-number-${part.partId || part.id}`} className="text-xs">
+                Part Number:
+              </Label>
+              <fetcher.Form method="post" className="flex gap-2">
+                <input type="hidden" name="partId" value={part.partId || part.id || ""} />
+                <input type="hidden" name="documentId" value={queryParams.documentId} />
+                <input type="hidden" name="instanceType" value={queryParams.instanceType} />
+                <input type="hidden" name="instanceId" value={queryParams.instanceId} />
+                <input type="hidden" name="elementId" value={queryParams.elementId} />
+                <Input
+                  id={`part-number-${part.partId || part.id}`}
+                  name="partNumber"
+                  value={partNumberInput}
+                  onChange={(e) => setPartNumberInput(e.target.value)}
+                  placeholder="Enter part number"
+                  className="h-8 text-xs flex-1"
+                  disabled={fetcher.state === "submitting"}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-8"
+                  disabled={fetcher.state === "submitting" || !partNumberInput.trim()}
+                >
+                  {fetcher.state === "submitting" ? "Setting..." : "Set"}
+                </Button>
+              </fetcher.Form>
+              {fetcher.data && !fetcher.data.success && fetcher.data.error && (
+                <p className="text-xs text-destructive">{fetcher.data.error}</p>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">Part Number: Not set</span>
+          )}
         </CardDescription>
       </CardHeader>
       {thumbnailHref && !thumbnailError && (
@@ -118,6 +168,98 @@ export function meta({}: Route.MetaArgs) {
     { title: "MFG Parts - Onshape Integration" },
     { name: "description", content: "View parts from Onshape Part Studio" },
   ];
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  // Check Onshape authentication (required)
+  const onshapeAuthenticated = await isOnshapeAuthenticated(request);
+  if (!onshapeAuthenticated) {
+    return { success: false, error: "Not authenticated with Onshape" };
+  }
+
+  try {
+    const formData = await request.formData();
+    const partId = formData.get("partId")?.toString();
+    const partNumber = formData.get("partNumber")?.toString();
+    const documentId = formData.get("documentId")?.toString();
+    const instanceType = formData.get("instanceType")?.toString() || "w";
+    const instanceId = formData.get("instanceId")?.toString();
+    const elementId = formData.get("elementId")?.toString();
+
+    if (!partId || !partNumber || !documentId || !instanceId || !elementId) {
+      return { success: false, error: "Missing required fields" };
+    }
+
+    const client = await createOnshapeApiClient(request);
+
+    // First, get the metadata to find the propertyId for "Part number"
+    const metadataResponse = await getWmvepMetadata({
+      client,
+      path: {
+        did: documentId,
+        wvm: instanceType as 'w' | 'v' | 'm',
+        wvmid: instanceId,
+        eid: elementId,
+        iden: 'p',
+        pid: partId,
+      },
+      query: {
+        includeComputedProperties: true,
+      },
+    });
+
+    const metadata = metadataResponse.data;
+    if (!metadata || !metadata.properties) {
+      return { success: false, error: "Failed to retrieve part metadata" };
+    }
+
+    // Find the "Part number" property
+    const partNumberProperty = metadata.properties.find(
+      (prop) => prop.name === "Part number" || prop.name === "Part Number"
+    );
+
+    if (!partNumberProperty || !partNumberProperty.propertyId) {
+      return { success: false, error: "Part number property not found in metadata" };
+    }
+
+    // Update the part number using the metadata API
+    const updateBody = JSON.stringify({
+      jsonType: "metadata-part",
+      partId: partId,
+      properties: [
+        {
+          value: partNumber.trim(),
+          propertyId: partNumberProperty.propertyId,
+        },
+      ],
+    });
+
+    await updateWvepMetadata({
+      client,
+      path: {
+        did: documentId,
+        wvm: instanceType as 'w' | 'v' | 'm',
+        wvmid: instanceId,
+        eid: elementId,
+        iden: 'p',
+        pid: partId,
+      },
+      body: updateBody,
+    });
+
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Error updating part number:", error);
+    
+    let errorMessage = "Failed to update part number";
+    if (error && typeof error === "object") {
+      if ("message" in error) {
+        errorMessage = String(error.message);
+      }
+    }
+
+    return { success: false, error: errorMessage };
+  }
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -387,7 +529,11 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
             <h2 className="text-xl font-semibold mb-4">Parts</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {parts.map((part) => (
-                <PartCard key={part.partId || part.id || part.partIdentity || JSON.stringify(part)} part={part} />
+                <PartCard 
+                  key={part.partId || part.id || part.partIdentity || JSON.stringify(part)} 
+                  part={part} 
+                  queryParams={queryParams}
+                />
               ))}
             </div>
           </div>
