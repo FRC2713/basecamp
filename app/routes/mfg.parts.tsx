@@ -12,8 +12,32 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
-import { AlertCircle, Box, Code, Loader2 } from "lucide-react";
+import { Skeleton } from "~/components/ui/skeleton";
+import { AlertCircle, Box, Code } from "lucide-react";
 import { useState } from "react";
+
+/**
+ * Skeleton component for PartCard loading state
+ */
+function PartCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-8 w-16" />
+        </div>
+        <Skeleton className="h-4 w-24 mt-2" />
+      </CardHeader>
+      <div className="px-6 pb-4">
+        <Skeleton className="w-full rounded border" style={{ height: '300px' }} />
+      </div>
+      <CardContent>
+        {/* Empty content for spacing */}
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * Component to display a single part with thumbnail error handling
@@ -83,20 +107,7 @@ function PartCard({ part }: { part: BtPartMetadataInfo }) {
         </div>
       )}
       <CardContent>
-        <div className="space-y-2 text-sm text-muted-foreground">
-          {part.appearance && (
-            <div>
-              <span className="font-semibold">Appearance:</span>{" "}
-              {part.appearance.color && (
-                <span className="inline-block w-4 h-4 rounded border border-gray-300 ml-1 align-middle" 
-                      style={{
-                        backgroundColor: `rgba(${part.appearance.color.red ?? 0}, ${part.appearance.color.green ?? 0}, ${part.appearance.color.blue ?? 0}, ${part.appearance.opacity ?? 1})`
-                      }}
-                />
-              )}
-            </div>
-          )}
-        </div>
+        {/* Empty content for spacing */}
       </CardContent>
     </Card>
   );
@@ -161,10 +172,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   try {
     const client = await createOnshapeApiClient(request);
     
-    // Fetch the part studio name
-    let partStudioName: string | null = null;
-    try {
-      const elementsResponse = await getElementsInDocument({
+    // Run both API calls in parallel for better performance
+    const [elementsResult, partsResult] = await Promise.allSettled([
+      // Fetch the part studio name (optional - can fail gracefully)
+      getElementsInDocument({
         client,
         path: {
           did: documentId,
@@ -174,34 +185,48 @@ export async function loader({ request }: Route.LoaderArgs) {
         query: {
           elementId: elementId,
         },
-      });
+      }),
+      // Fetch parts data (required - failure should propagate)
+      getPartsWmve({
+        client,
+        path: {
+          did: documentId,
+          wvm: instanceType,
+          wvmid: instanceId,
+          eid: elementId,
+        },
+        query: {
+          withThumbnails: true,
+        },
+      }),
+    ]);
 
-      const elements = Array.isArray(elementsResponse.data) ? elementsResponse.data : [];
-      const element = elements.find((el) => el.id === elementId);
-      if (element?.name) {
-        partStudioName = element.name;
+    // Handle part studio name result (optional - continue if it fails)
+    let partStudioName: string | null = null;
+    if (elementsResult.status === 'fulfilled') {
+      try {
+        const elements = Array.isArray(elementsResult.value.data) ? elementsResult.value.data : [];
+        const element = elements.find((el) => el.id === elementId);
+        if (element?.name) {
+          partStudioName = element.name;
+        }
+      } catch (error) {
+        // If we can't process the element name, continue without it
+        console.warn("Failed to process part studio name:", error);
       }
-    } catch (error) {
-      // If we can't fetch the element name, continue without it
-      console.warn("Failed to fetch part studio name:", error);
+    } else {
+      // If fetching the element name failed, continue without it
+      console.warn("Failed to fetch part studio name:", elementsResult.reason);
     }
 
-    // Call Onshape API to get parts using the generated client
-    const response = await getPartsWmve({
-      client,
-      path: {
-        did: documentId,
-        wvm: instanceType,
-        wvmid: instanceId,
-        eid: elementId,
-      },
-      query: {
-        withThumbnails: true,
-      },
-    });
+    // Handle parts result (required - failure should propagate)
+    if (partsResult.status === 'rejected') {
+      // Re-throw the error to be caught by outer catch block
+      throw partsResult.reason;
+    }
 
     // Extract parts from response (response.data is an array of BtPartMetadataInfo)
-    const parts = response.data || [];
+    const parts = partsResult.value.data || [];
 
     return {
       parts,
@@ -278,10 +303,26 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
   if (isLoading) {
     return (
       <main className="container mx-auto py-8 px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading parts...</p>
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Header Skeleton */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Box className="h-8 w-8" />
+                <Skeleton className="h-8 w-48" />
+              </div>
+              <Skeleton className="h-5 w-32" />
+            </div>
+          </div>
+
+          {/* Parts Grid Skeleton */}
+          <div>
+            <Skeleton className="h-7 w-24 mb-4" />
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <PartCardSkeleton key={index} />
+              ))}
+            </div>
           </div>
         </div>
       </main>
