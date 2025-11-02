@@ -1,8 +1,9 @@
 import { getSession, isBasecampAuthenticated, commitSession } from "~/lib/session";
-import { refreshBasecampTokenIfNeededWithSession } from "~/lib/tokenRefresh";
+import { refreshBasecampTokenIfNeededWithSession, refreshOnshapeTokenIfNeededWithSession } from "~/lib/tokenRefresh";
 import { BasecampClient } from "~/lib/basecampApi/client";
 import { getCardTable } from "~/lib/basecampApi/cardTables";
 import { createCardTableCard, moveCardTableCard, updateCardTableCard } from "~/lib/basecampApi/cardTableCards";
+import { updateCardContentWithThumbnail, type PartMetadata } from "../utils/cardContentUpdate";
 import type { ActionResponse } from "../utils/types";
 
 /**
@@ -63,9 +64,55 @@ export async function handleAddCard(
     return { success: false, error: "No columns found in card table" };
   }
 
-  await createCardTableCard(client, projectId, targetColumn.id, {
+  const cardResponse = await createCardTableCard(client, projectId, targetColumn.id, {
     title: partNumber,
   });
+
+  const createdCardId = cardResponse.data.id;
+
+  // Update card content with thumbnail if part metadata is provided
+  const documentId = formData.get("documentId")?.toString();
+  const instanceType = formData.get("instanceType")?.toString();
+  const instanceId = formData.get("instanceId")?.toString();
+  const elementId = formData.get("elementId")?.toString();
+  const partId = formData.get("partId")?.toString();
+
+  if (documentId && instanceType && instanceId && elementId && partId) {
+    try {
+      // Get Onshape token and client
+      await refreshOnshapeTokenIfNeededWithSession(session);
+      const onshapeAccessToken = session.get("onshapeAccessToken");
+      
+      if (onshapeAccessToken) {
+        // Create Onshape client using the token from session
+        const { getOnshapeApiClient } = await import("~/lib/onshapeApi/generated-wrapper");
+        const onshapeClientWithToken = getOnshapeApiClient(onshapeAccessToken);
+
+        const partMetadata: PartMetadata = {
+          documentId,
+          instanceType,
+          instanceId,
+          elementId,
+          partId,
+        };
+
+        // Update content with thumbnail (non-blocking - if it fails, card creation still succeeds)
+        updateCardContentWithThumbnail(
+          createdCardId,
+          partMetadata,
+          client,
+          projectId,
+          onshapeClientWithToken,
+          onshapeAccessToken
+        ).catch((error) => {
+          console.warn("[ACTION] Failed to update card content with thumbnail:", error);
+        });
+      }
+    } catch (error) {
+      console.warn("[ACTION] Failed to prepare thumbnail update:", error);
+      // Don't fail the card creation if thumbnail update fails
+    }
+  }
 
   return { 
     success: true,
@@ -129,6 +176,49 @@ export async function handleMoveCard(
   try {
     const result = await moveCardTableCard(client, projectId, cardIdNum, columnIdNum);
     console.log("[ACTION] Move card successful:", result);
+
+    // Update card content with thumbnail if part metadata is provided
+    const documentId = formData.get("documentId")?.toString();
+    const instanceType = formData.get("instanceType")?.toString();
+    const instanceId = formData.get("instanceId")?.toString();
+    const elementId = formData.get("elementId")?.toString();
+    const partId = formData.get("partId")?.toString();
+
+    if (documentId && instanceType && instanceId && elementId && partId) {
+      try {
+        // Get Onshape token and client
+        await refreshOnshapeTokenIfNeededWithSession(session);
+        const onshapeAccessToken = session.get("onshapeAccessToken");
+        
+        if (onshapeAccessToken) {
+          const { getOnshapeApiClient } = await import("~/lib/onshapeApi/generated-wrapper");
+          const onshapeClientWithToken = getOnshapeApiClient(onshapeAccessToken);
+
+          const partMetadata: PartMetadata = {
+            documentId,
+            instanceType,
+            instanceId,
+            elementId,
+            partId,
+          };
+
+          // Update content with thumbnail (non-blocking)
+          updateCardContentWithThumbnail(
+            cardIdNum,
+            partMetadata,
+            client,
+            projectId,
+            onshapeClientWithToken,
+            onshapeAccessToken
+          ).catch((error) => {
+            console.warn("[ACTION] Failed to update card content with thumbnail:", error);
+          });
+        }
+      } catch (error) {
+        console.warn("[ACTION] Failed to prepare thumbnail update:", error);
+        // Don't fail the card move if thumbnail update fails
+      }
+    }
   } catch (moveError: unknown) {
     console.error("[ACTION] Move card API error:", moveError);
     
@@ -211,6 +301,49 @@ export async function handleUpdateDueDate(
     
     await updateCardTableCard(client, projectId, cardIdNum, payload);
     console.log("[ACTION] Update due date successful:", { cardId: cardIdNum, dueOn });
+
+    // Update card content with thumbnail if part metadata is provided
+    const documentId = formData.get("documentId")?.toString();
+    const instanceType = formData.get("instanceType")?.toString();
+    const instanceId = formData.get("instanceId")?.toString();
+    const elementId = formData.get("elementId")?.toString();
+    const partId = formData.get("partId")?.toString();
+
+    if (documentId && instanceType && instanceId && elementId && partId) {
+      try {
+        // Get Onshape token and client
+        await refreshOnshapeTokenIfNeededWithSession(session);
+        const onshapeAccessToken = session.get("onshapeAccessToken");
+        
+        if (onshapeAccessToken) {
+          const { getOnshapeApiClient } = await import("~/lib/onshapeApi/generated-wrapper");
+          const onshapeClientWithToken = getOnshapeApiClient(onshapeAccessToken);
+
+          const partMetadata: PartMetadata = {
+            documentId,
+            instanceType,
+            instanceId,
+            elementId,
+            partId,
+          };
+
+          // Update content with thumbnail (non-blocking)
+          updateCardContentWithThumbnail(
+            cardIdNum,
+            partMetadata,
+            client,
+            projectId,
+            onshapeClientWithToken,
+            onshapeAccessToken
+          ).catch((error) => {
+            console.warn("[ACTION] Failed to update card content with thumbnail:", error);
+          });
+        }
+      } catch (error) {
+        console.warn("[ACTION] Failed to prepare thumbnail update:", error);
+        // Don't fail the card update if thumbnail update fails
+      }
+    }
   } catch (updateError: unknown) {
     console.error("[ACTION] Update due date API error:", updateError);
     

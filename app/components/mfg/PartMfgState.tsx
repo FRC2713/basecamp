@@ -15,8 +15,11 @@ import type { CardWithColumn } from "~/routes/mfg.parts/utils/types";
 import { ManufacturingStateBadge } from "./ManufacturingStateBadge";
 import { PartDueDate } from "./PartDueDate";
 
+import type { PartsQueryParams } from "~/routes/mfg.parts/utils/types";
+
 interface PartMfgStateProps {
   part: BtPartMetadataInfo;
+  queryParams: PartsQueryParams;
   cards: CardWithColumn[];
   columns: CardTableColumn[];
 }
@@ -24,7 +27,7 @@ interface PartMfgStateProps {
 /**
  * Component to display manufacturing tracking state for a part
  */
-export function PartMfgState({ part, cards, columns }: PartMfgStateProps) {
+export function PartMfgState({ part, queryParams, cards, columns }: PartMfgStateProps) {
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
 
@@ -61,6 +64,15 @@ export function PartMfgState({ part, cards, columns }: PartMfgStateProps) {
         <fetcher.Form method="post">
           <input type="hidden" name="action" value="addCard" />
           <input type="hidden" name="partNumber" value={part.partNumber} />
+          {queryParams.documentId && (
+            <>
+              <input type="hidden" name="documentId" value={queryParams.documentId} />
+              <input type="hidden" name="instanceType" value={queryParams.instanceType} />
+              <input type="hidden" name="instanceId" value={queryParams.instanceId || ""} />
+              <input type="hidden" name="elementId" value={queryParams.elementId || ""} />
+              <input type="hidden" name="partId" value={part.partId || part.id || ""} />
+            </>
+          )}
           <Button
             type="submit"
             size="sm"
@@ -92,6 +104,16 @@ export function PartMfgState({ part, cards, columns }: PartMfgStateProps) {
     formData.append("action", "moveCard");
     formData.append("cardId", String(matchingCard.id));
     formData.append("columnId", String(newColumnId));
+    
+    // Add part metadata for thumbnail update
+    if (queryParams.documentId) {
+      formData.append("documentId", queryParams.documentId);
+      formData.append("instanceType", queryParams.instanceType);
+      formData.append("instanceId", queryParams.instanceId || "");
+      formData.append("elementId", queryParams.elementId || "");
+      formData.append("partId", part.partId || part.id || "");
+    }
+    
     fetcher.submit(formData, { method: "post" });
   };
 
@@ -119,7 +141,7 @@ export function PartMfgState({ part, cards, columns }: PartMfgStateProps) {
           ))}
         </SelectContent>
       </Select>
-      <PartDueDate card={matchingCard} columns={columns} />
+      <PartDueDate card={matchingCard} part={part} queryParams={queryParams} columns={columns} />
       {fetcher.data && !fetcher.data.success && fetcher.data.error && (
         <p className="text-xs text-destructive">{fetcher.data.error}</p>
       )}

@@ -56,6 +56,7 @@ export interface UpdateCardPayload {
   title?: string;
   description?: string;
   due_on?: string | null;
+  content?: string; // Rich text content (supports <bc-attachment> tags)
 }
 
 /**

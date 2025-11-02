@@ -11,11 +11,14 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import { cn } from "~/lib/utils";
-import type { CardWithColumn } from "~/routes/mfg.parts/utils/types";
+import type { CardWithColumn, PartsQueryParams } from "~/routes/mfg.parts/utils/types";
 import type { CardTableColumn } from "~/lib/basecampApi/cardTables";
+import type { BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 
 interface PartDueDateProps {
   card: CardWithColumn;
+  part: BtPartMetadataInfo;
+  queryParams: PartsQueryParams;
   columns: CardTableColumn[];
 }
 
@@ -36,7 +39,7 @@ function parseLocalDate(dateString: string): Date {
   return parseISO(dateString);
 }
 
-export function PartDueDate({ card }: PartDueDateProps) {
+export function PartDueDate({ card, part, queryParams }: PartDueDateProps) {
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
   const [open, setOpen] = useState(false);
@@ -114,6 +117,15 @@ export function PartDueDate({ card }: PartDueDateProps) {
       formData.append("cardId", String(card.id));
       formData.append("dueOn", isoDate);
       
+      // Add part metadata for thumbnail update
+      if (queryParams.documentId) {
+        formData.append("documentId", queryParams.documentId);
+        formData.append("instanceType", queryParams.instanceType);
+        formData.append("instanceId", queryParams.instanceId || "");
+        formData.append("elementId", queryParams.elementId || "");
+        formData.append("partId", part.partId || part.id || "");
+      }
+      
       fetcher.submit(formData, { method: "post" });
     }
   };
@@ -129,6 +141,15 @@ export function PartDueDate({ card }: PartDueDateProps) {
     formData.append("action", "updateDueDate");
     formData.append("cardId", String(card.id));
     formData.append("dueOn", "");
+    
+    // Add part metadata for thumbnail update
+    if (queryParams.documentId) {
+      formData.append("documentId", queryParams.documentId);
+      formData.append("instanceType", queryParams.instanceType);
+      formData.append("instanceId", queryParams.instanceId || "");
+      formData.append("elementId", queryParams.elementId || "");
+      formData.append("partId", part.partId || part.id || "");
+    }
     
     fetcher.submit(formData, { method: "post" });
   };

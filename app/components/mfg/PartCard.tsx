@@ -70,7 +70,7 @@ export function PartCard({ part, queryParams, cards, columns }: PartCardProps) {
       </CardHeader>
       <PartCardThumbnail part={part} />
       <CardContent className="space-y-4">
-        <PartMfgState part={part} cards={cards} columns={columns} />
+        <PartMfgState part={part} queryParams={queryParams} cards={cards} columns={columns} />
       </CardContent>
     </Card>
   );

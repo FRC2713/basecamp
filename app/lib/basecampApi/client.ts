@@ -343,5 +343,106 @@ export class BasecampClient {
 
     return allItems;
   }
+
+  /**
+   * Upload binary data (for file attachments)
+   * POST /buckets/{project_id}/attachments.json
+   * 
+   * @param endpoint - The API endpoint (with query params if needed)
+   * @param binaryData - The raw binary data (ArrayBuffer, Blob, etc.)
+   * @param contentType - The Content-Type header value
+   * @param filename - The filename for the name query parameter
+   * @returns Promise resolving to the attachment response with attachable_sgid
+   */
+  async uploadBinary<T = unknown>(
+    endpoint: string,
+    binaryData: ArrayBuffer | Blob | Uint8Array,
+    contentType: string,
+    filename: string
+  ): Promise<BasecampResponse<T>> {
+    const url = endpoint.startsWith("http") ? endpoint : `${this.baseUrl}${endpoint}`;
+    
+    // Ensure endpoint ends with .json if it's a relative path
+    const finalUrl = endpoint.startsWith("http") 
+      ? url 
+      : url.endsWith(".json") 
+        ? url 
+        : `${url}.json`;
+
+    // Add filename as query parameter
+    const urlObj = new URL(finalUrl);
+    urlObj.searchParams.set("name", filename);
+    const finalUrlWithParams = urlObj.toString();
+
+    // Convert binary data to ArrayBuffer if needed
+    let buffer: ArrayBuffer;
+    if (binaryData instanceof ArrayBuffer) {
+      buffer = binaryData;
+    } else if (binaryData instanceof Blob) {
+      buffer = await binaryData.arrayBuffer();
+    } else {
+      // Uint8Array or similar
+      buffer = binaryData.buffer;
+    }
+
+    const headers = new Headers({
+      "Authorization": `Bearer ${this.accessToken}`,
+      "User-Agent": this.userAgent,
+      "Accept": "application/json",
+      "Content-Type": contentType,
+      "Content-Length": String(buffer.byteLength),
+    });
+
+    const response = await fetch(finalUrlWithParams, {
+      method: "POST",
+      headers,
+      body: buffer,
+    });
+
+    // Handle rate limiting (429) with retry
+    if (response.status === 429) {
+      const retryAfter = response.headers.get("Retry-After");
+      const delay = retryAfter 
+        ? parseInt(retryAfter, 10) * 1000 
+        : 1000;
+      
+      await sleep(delay);
+      // Retry once
+      return this.uploadBinary(endpoint, binaryData, contentType, filename);
+    }
+
+    // Handle other errors
+    if (!response.ok) {
+      let errorMessage = `Upload failed with status ${response.status}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.message || errorData.error) {
+          errorMessage = errorData.message || errorData.error;
+        }
+      } catch {
+        // If response isn't JSON, use default message
+      }
+
+      throw {
+        message: errorMessage,
+        status: response.status,
+      } as BasecampError;
+    }
+
+    // Parse JSON response
+    const data = await response.json();
+
+    // Parse pagination headers
+    const linkHeader = response.headers.get("Link");
+    const totalCountHeader = response.headers.get("X-Total-Count");
+
+    return {
+      data: data as T,
+      headers: response.headers,
+      status: response.status,
+      link: parseLinkHeader(linkHeader),
+      totalCount: totalCountHeader ? parseInt(totalCountHeader, 10) : undefined,
+    };
+  }
 }
 
