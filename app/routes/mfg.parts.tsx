@@ -37,7 +37,13 @@ export async function loader({ request }: Route.LoaderArgs) {
       error: validation.error,
       parts: [],
       partStudioName: null,
-      queryParams: validation.queryParams,
+      queryParams: validation.queryParams || {
+        documentId: null,
+        instanceType: "w",
+        instanceId: null,
+        elementId: null,
+        elementType: null,
+      },
       exampleUrl: validation.exampleUrl,
       basecampCards: [],
       basecampColumns: [],
@@ -135,7 +141,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
           </Card>
         )}
 
-        {parts.length > 0 && (
+        {parts.length > 0 && queryParams && (
           <div>
             <h2 className="text-xl font-semibold mb-4">Parts</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
