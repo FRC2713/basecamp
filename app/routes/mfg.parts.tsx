@@ -1,10 +1,18 @@
 import type { Route } from "./+types/mfg.parts";
 import { redirect } from "react-router";
 import { isOnshapeAuthenticated } from "~/lib/session";
-import { createOnshapeApiClient, getPartsWmve, type BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
+import { createOnshapeApiClient, getPartsWmve, getElementsInDocument, type BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import { AlertCircle, Box } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "~/components/ui/dialog";
+import { AlertCircle, Box, Code } from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -13,6 +21,8 @@ import { useState } from "react";
 function PartCard({ part }: { part: BtPartMetadataInfo }) {
   const thumbnailHref = part.thumbnailInfo?.href;
   const [thumbnailError, setThumbnailError] = useState(false);
+  const [isJsonDialogOpen, setIsJsonDialogOpen] = useState(false);
+  const jsonString = JSON.stringify(part, null, 2);
 
   return (
     <Card className="hover:shadow-lg transition-shadow">
@@ -21,9 +31,31 @@ function PartCard({ part }: { part: BtPartMetadataInfo }) {
           <CardTitle className="text-lg">
             {part.name || `Part ${part.partId || part.id || 'Unknown'}`}
           </CardTitle>
-          {part.isHidden && (
-            <Badge variant="secondary">Hidden</Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {part.isHidden && (
+              <Badge variant="secondary">Hidden</Badge>
+            )}
+            <Dialog open={isJsonDialogOpen} onOpenChange={setIsJsonDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8">
+                  <Code className="h-4 w-4 mr-1" />
+                  JSON
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+                <DialogHeader>
+                  <DialogTitle>
+                    {part.name || `Part ${part.partId || part.id || 'Unknown'}`} - JSON
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-auto bg-muted rounded-md p-4">
+                  <pre className="text-xs font-mono whitespace-pre-wrap wrap-break-word">
+                    {jsonString}
+                  </pre>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
         {part.name && part.partId && (
           <CardDescription>
@@ -107,6 +139,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       error: "Missing required query parameters. Required: documentId, instanceId, elementId. Optional: instanceType (defaults to 'w'), elementType.",
       parts: [],
+      partStudioName: null,
       queryParams: {
         documentId,
         instanceType,
@@ -123,6 +156,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     return {
       error: `Invalid elementType: "${elementType}". Expected "PARTSTUDIO" or omit this parameter.`,
       parts: [],
+      partStudioName: null,
       queryParams: {
         documentId,
         instanceType,
@@ -137,6 +171,31 @@ export async function loader({ request }: Route.LoaderArgs) {
   try {
     const client = await createOnshapeApiClient(request);
     
+    // Fetch the part studio name
+    let partStudioName: string | null = null;
+    try {
+      const elementsResponse = await getElementsInDocument({
+        client,
+        path: {
+          did: documentId,
+          wvm: instanceType as 'w' | 'v' | 'm',
+          wvmid: instanceId,
+        },
+        query: {
+          elementId: elementId,
+        },
+      });
+
+      const elements = Array.isArray(elementsResponse.data) ? elementsResponse.data : [];
+      const element = elements.find((el) => el.id === elementId);
+      if (element?.name) {
+        partStudioName = element.name;
+      }
+    } catch (error) {
+      // If we can't fetch the element name, continue without it
+      console.warn("Failed to fetch part studio name:", error);
+    }
+
     // Call Onshape API to get parts using the generated client
     const response = await getPartsWmve({
       client,
@@ -156,6 +215,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     return {
       parts,
+      partStudioName,
       queryParams: {
         documentId,
         instanceType,
@@ -205,6 +265,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
     return {
       parts: [],
+      partStudioName: null,
       queryParams: {
         documentId,
         instanceType,
@@ -219,7 +280,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function MfgParts({ loaderData }: Route.ComponentProps) {
-  const { parts, queryParams, error, exampleUrl } = loaderData;
+  const { parts, partStudioName, queryParams, error, exampleUrl } = loaderData;
 
   return (
     <main className="container mx-auto py-8 px-4">
@@ -229,48 +290,13 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
           <div>
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
               <Box className="h-8 w-8" />
-              MFG Parts
+              {partStudioName || "MFG Parts"}
             </h1>
             <p className="text-muted-foreground mt-1">
               {parts.length} {parts.length === 1 ? "part" : "parts"} found
             </p>
           </div>
         </div>
-
-        {/* Query Parameters Info */}
-        {queryParams.documentId && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Part Studio Information</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <span className="font-semibold">Document ID:</span>{" "}
-                  <code className="bg-muted px-1 rounded">{queryParams.documentId}</code>
-                </div>
-                <div>
-                  <span className="font-semibold">Instance Type:</span>{" "}
-                  <code className="bg-muted px-1 rounded">{queryParams.instanceType}</code>
-                </div>
-                <div>
-                  <span className="font-semibold">Instance ID:</span>{" "}
-                  <code className="bg-muted px-1 rounded">{queryParams.instanceId}</code>
-                </div>
-                <div>
-                  <span className="font-semibold">Element ID:</span>{" "}
-                  <code className="bg-muted px-1 rounded">{queryParams.elementId}</code>
-                </div>
-                {queryParams.elementType && (
-                  <div>
-                    <span className="font-semibold">Element Type:</span>{" "}
-                    <Badge variant="secondary">{queryParams.elementType}</Badge>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Error Message */}
         {error && (
