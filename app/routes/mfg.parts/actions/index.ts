@@ -2,7 +2,7 @@ import type { Route } from "../../+types/mfg.parts";
 import { getSession } from "~/lib/session";
 import { isBasecampAuthenticated } from "~/lib/session";
 import { refreshBasecampTokenIfNeededWithSession } from "~/lib/tokenRefresh";
-import { handleAddCard, handleMoveCard } from "./cardOperations";
+import { handleAddCard, handleMoveCard, handleUpdateDueDate } from "./cardOperations";
 import { handlePartNumberUpdate } from "./partNumberUpdate";
 import { createErrorResponse } from "../utils/errorHandling";
 
@@ -14,8 +14,8 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const actionType = formData.get("action")?.toString();
 
-  // Handle Basecamp card operations (addCard, moveCard)
-  if (actionType === "addCard" || actionType === "moveCard") {
+  // Handle Basecamp card operations (addCard, moveCard, updateDueDate)
+  if (actionType === "addCard" || actionType === "moveCard" || actionType === "updateDueDate") {
     // Check Basecamp authentication
     const basecampAuthenticated = await isBasecampAuthenticated(request);
     if (!basecampAuthenticated) {
@@ -33,6 +33,8 @@ export async function action({ request }: Route.ActionArgs) {
         return await handleAddCard(formData, session);
       } else if (actionType === "moveCard") {
         return await handleMoveCard(formData, session);
+      } else if (actionType === "updateDueDate") {
+        return await handleUpdateDueDate(formData, session);
       }
     } catch (error: unknown) {
       console.error("Error in Basecamp card operation:", error);

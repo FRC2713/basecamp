@@ -13,6 +13,7 @@ import type { BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 import type { CardTableColumn } from "~/lib/basecampApi/cardTables";
 import type { CardWithColumn } from "~/routes/mfg.parts/utils/types";
 import { ManufacturingStateBadge } from "./ManufacturingStateBadge";
+import { PartDueDate } from "./PartDueDate";
 
 interface PartMfgStateProps {
   part: BtPartMetadataInfo;
@@ -118,6 +119,7 @@ export function PartMfgState({ part, cards, columns }: PartMfgStateProps) {
           ))}
         </SelectContent>
       </Select>
+      <PartDueDate card={matchingCard} columns={columns} />
       {fetcher.data && !fetcher.data.success && fetcher.data.error && (
         <p className="text-xs text-destructive">{fetcher.data.error}</p>
       )}

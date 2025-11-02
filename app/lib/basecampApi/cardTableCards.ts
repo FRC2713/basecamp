@@ -38,6 +38,7 @@ export interface CardTableCard {
   };
   comments_url?: string;
   position?: number;
+  due_on?: string;
 }
 
 /**
@@ -54,6 +55,7 @@ export interface CreateCardPayload {
 export interface UpdateCardPayload {
   title?: string;
   description?: string;
+  due_on?: string | null;
 }
 
 /**
