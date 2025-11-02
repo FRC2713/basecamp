@@ -874,16 +874,16 @@ export async function loader({ request }: Route.LoaderArgs) {
       }),
       // Fetch parts data (required - failure should propagate)
       getPartsWmve({
-        client,
-        path: {
-          did: documentId,
-          wvm: instanceType,
-          wvmid: instanceId,
-          eid: elementId,
-        },
-        query: {
-          withThumbnails: true,
-        },
+      client,
+      path: {
+        did: documentId,
+        wvm: instanceType,
+        wvmid: instanceId,
+        eid: elementId,
+      },
+      query: {
+        withThumbnails: true,
+      },
       }),
     ]);
 

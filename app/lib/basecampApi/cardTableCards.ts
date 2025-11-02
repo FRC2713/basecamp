@@ -3,8 +3,7 @@
  * Documentation: https://github.com/basecamp/bc3-api/blob/master/sections/card_table_cards.md
  */
 
-import type { BasecampClient } from "./client";
-import type { BasecampResponse } from "./client";
+import type { BasecampClient, BasecampResponse } from "./client";
 
 /**
  * Card Table Card interface based on Basecamp API structure
@@ -61,7 +60,7 @@ export interface UpdateCardPayload {
  * Move Card request payload
  */
 export interface MoveCardPayload {
-  destination: number; // Column ID
+  column_id: number; // Column ID (destination column)
 }
 
 /**
@@ -208,7 +207,7 @@ export async function moveCardTableCard(
 ): Promise<BasecampResponse<CardTableCard>> {
   return client.post<CardTableCard>(
     `/buckets/${projectId}/card_tables/cards/${cardId}/moves.json`,
-    { destination: Number(destinationColumnId) }
+    { column_id: Number(destinationColumnId) }
   );
 }
 
