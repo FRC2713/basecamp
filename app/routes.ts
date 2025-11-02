@@ -16,4 +16,6 @@ export default [
     route("mfg/tasks", "routes/mfg.tasks.tsx"),
     route("mfg/parts", "routes/mfg.parts.tsx"),
   ]),
+  // API routes (not in layout)
+  route("api/onshape/thumbnail", "routes/api.onshape.thumbnail.tsx"),
 ] satisfies RouteConfig;

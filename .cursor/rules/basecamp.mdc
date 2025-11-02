@@ -2,6 +2,12 @@
 alwaysApply: true
 ---
 
-This is an application that will integrate with Basecamp. It uses react router v7 and shadcn.  
+This is an application that will integrate with Basecamp. 
+
+It uses react router v7 as a framework
+
+It uses shadcn for as a component library.
+
+It is deployed on vercel.
 
 The documentation for the basecamp 4 api is located here: https://github.com/basecamp/bc3-api?tab=readme-ov-file

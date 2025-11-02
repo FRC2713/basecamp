@@ -19,8 +19,18 @@ import { useState } from "react";
  * Component to display a single part with thumbnail error handling
  */
 function PartCard({ part }: { part: BtPartMetadataInfo }) {
-  // Get thumbnail from multiple possible sources
-  const thumbnailHref = part.thumbnailInfo?.sizes?.[0]?.href;
+  // Get thumbnail - prefer the main href (has timestamp token) over sizes
+  // Fallback to sizes if main href doesn't exist
+  const rawThumbnailUrl = part.thumbnailInfo?.href || 
+    part.thumbnailInfo?.sizes?.[0]?.href ||
+    part.thumbnailInfo?.sizes?.find(s => s.size === "300x300")?.href ||
+    part.thumbnailInfo?.sizes?.find(s => s.size === "600x340")?.href;
+  
+  // Use proxy endpoint for authenticated thumbnail access
+  const thumbnailHref = rawThumbnailUrl 
+    ? `/api/onshape/thumbnail?url=${encodeURIComponent(rawThumbnailUrl)}`
+    : null;
+  
   const [thumbnailError, setThumbnailError] = useState(false);
   const [isJsonDialogOpen, setIsJsonDialogOpen] = useState(false);
   const jsonString = JSON.stringify(part, null, 2);
