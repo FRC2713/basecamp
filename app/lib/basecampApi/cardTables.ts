@@ -3,8 +3,7 @@
  * Documentation: https://github.com/basecamp/bc3-api/blob/master/sections/card_tables.md
  */
 
-import type { BasecampClient } from "./client";
-import type { BasecampResponse } from "./client";
+import type { BasecampClient, BasecampResponse } from "./client";
 
 /**
  * Card Table interface based on Basecamp API structure
@@ -105,6 +104,7 @@ export interface CardTableColumn {
   url: string;
   app_url: string;
   cards_count: number;
+  color: string | null;
 }
 
 /**

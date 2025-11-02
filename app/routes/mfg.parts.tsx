@@ -186,6 +186,27 @@ function PartCard({
   const revalidator = useRevalidator();
   const jsonString = JSON.stringify(part, null, 2);
 
+  // Find matching card and its column to get the column color
+  const matchingCard = part.partNumber 
+    ? cards.find(card => card.title === part.partNumber)
+    : null;
+  
+  const currentColumn = matchingCard 
+    ? columns.find(col => {
+        const columnIdNum = Number(col.id);
+        const cardParentId = matchingCard.parent?.id;
+        const cardColumnId = matchingCard.columnId;
+        return (cardParentId !== undefined && Number(cardParentId) === columnIdNum) ||
+               (cardColumnId !== undefined && Number(cardColumnId) === columnIdNum);
+      })
+    : null;
+
+  // Get background color from column, if available
+  const backgroundColor = currentColumn?.color || undefined;
+  const cardStyle = backgroundColor 
+    ? { backgroundColor, borderColor: backgroundColor }
+    : undefined;
+
   // Handle successful part number update
   useEffect(() => {
     console.log("[PartCard] Fetcher state changed:", {
@@ -204,7 +225,10 @@ function PartCard({
   }, [fetcher.data, fetcher.state, revalidator]);
 
   return (
-    <Card className="hover:shadow-lg transition-shadow">
+    <Card 
+      className="hover:shadow-lg transition-shadow" 
+      style={cardStyle}
+    >
       <CardHeader>
         <div className="flex items-start justify-between">
           <CardTitle className="text-lg">
