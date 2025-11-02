@@ -67,11 +67,9 @@ function PartCard({ part }: { part: BtPartMetadataInfo }) {
             </Dialog>
           </div>
         </div>
-        {part.partNumber && (
-          <CardDescription>
-            Part Number: <code className="text-xs">{part.partNumber}</code>
-          </CardDescription>
-        )}
+        <CardDescription>
+          Part Number: <code className="text-xs">{part.partNumber || ""}</code>
+        </CardDescription>
       </CardHeader>
       {thumbnailHref && !thumbnailError && (
         <div className="px-6 pb-4">
