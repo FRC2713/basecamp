@@ -1,0 +1,41 @@
+import { useState } from "react";
+import type { BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
+
+interface PartCardThumbnailProps {
+  part: BtPartMetadataInfo;
+}
+
+/**
+ * Component to display part thumbnail with error handling
+ */
+export function PartCardThumbnail({ part }: PartCardThumbnailProps) {
+  // Always prefer 300x300 thumbnail from sizes array
+  // The main href is just a JSON link, not an image
+  const rawThumbnailUrl = part.thumbnailInfo?.sizes?.find(s => s.size === "300x300")?.href ||
+    part.thumbnailInfo?.sizes?.[0]?.href ||
+    part.thumbnailInfo?.sizes?.find(s => s.size === "600x340")?.href;
+  
+  // Use proxy endpoint for authenticated thumbnail access
+  const thumbnailHref = rawThumbnailUrl 
+    ? `/api/onshape/thumbnail?url=${encodeURIComponent(rawThumbnailUrl)}`
+    : null;
+  
+  const [thumbnailError, setThumbnailError] = useState(false);
+
+  if (!thumbnailHref || thumbnailError) {
+    return null;
+  }
+
+  return (
+    <div className="px-6 pb-4">
+      <img
+        src={thumbnailHref}
+        alt={`Thumbnail for ${part.name || part.partId || part.id || 'part'}`}
+        className="w-full h-auto rounded border bg-muted"
+        onError={() => setThumbnailError(true)}
+        style={{ maxHeight: '300px', objectFit: 'contain' }}
+      />
+    </div>
+  );
+}
+
