@@ -37,6 +37,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     
     const authUrl = getAuthorizationUrl(redirectUri, clientId, existingState);
     const cookie = await commitSession(session);
+
+    // https://frc2713-basecamp.vercel.app/mfg/parts?elementType=PARTSTUDIO&documentId=93371085fe0df01c1bd01af8&instanceType=w&instanceId=13b14b60f19e361506cd325f&elementId=387767658bafc77ebb614078
     
     return {
       authUrl,

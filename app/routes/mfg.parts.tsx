@@ -19,11 +19,10 @@ import { useState } from "react";
  * Component to display a single part with thumbnail error handling
  */
 function PartCard({ part }: { part: BtPartMetadataInfo }) {
-  // Get thumbnail - prefer the main href (has timestamp token) over sizes
-  // Fallback to sizes if main href doesn't exist
-  const rawThumbnailUrl = part.thumbnailInfo?.href || 
+  // Always prefer 300x300 thumbnail from sizes array
+  // The main href is just a JSON link, not an image
+  const rawThumbnailUrl = part.thumbnailInfo?.sizes?.find(s => s.size === "300x300")?.href ||
     part.thumbnailInfo?.sizes?.[0]?.href ||
-    part.thumbnailInfo?.sizes?.find(s => s.size === "300x300")?.href ||
     part.thumbnailInfo?.sizes?.find(s => s.size === "600x340")?.href;
   
   // Use proxy endpoint for authenticated thumbnail access
