@@ -42,8 +42,10 @@ export async function updateCardContentWithThumbnail(
     // First, get the current card to preserve existing fields like due_on
     let currentCard;
     try {
+      console.log(`[CardContent] Fetching current card ${cardId}...`);
       const cardResponse = await getCardTableCard(basecampClient, projectId, cardId);
       currentCard = cardResponse.data;
+      console.log(`[CardContent] Successfully fetched card ${cardId}`);
     } catch (error) {
       console.warn(`[CardContent] Failed to fetch current card data:`, error);
       // Continue anyway - we'll update without preserving due_on
@@ -72,9 +74,9 @@ export async function updateCardContentWithThumbnail(
 
     if (!part) {
       console.warn(`[CardContent] Part not found: ${partMetadata.partId}`);
-      // Update content with empty string as per plan (option b), preserving due_on
+      // Update description with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        content: "",
+        description: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
@@ -88,9 +90,9 @@ export async function updateCardContentWithThumbnail(
 
     if (!thumbnailUrl) {
       console.warn(`[CardContent] No thumbnail URL found for part ${partMetadata.partId}`);
-      // Update content with empty string as per plan (option b), preserving due_on
+      // Update description with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        content: "",
+        description: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
@@ -105,9 +107,9 @@ export async function updateCardContentWithThumbnail(
 
     if (!thumbnailResponse.ok) {
       console.warn(`[CardContent] Failed to fetch thumbnail: ${thumbnailResponse.status}`);
-      // Update content with empty string as per plan (option b), preserving due_on
+      // Update description with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        content: "",
+        description: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
@@ -125,6 +127,7 @@ export async function updateCardContentWithThumbnail(
     const filename = `${partName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.${extension}`;
 
     // Upload attachment to Basecamp
+    console.log(`[CardContent] Uploading attachment to Basecamp...`);
     const attachmentResponse = await createAttachment(
       basecampClient,
       projectId,
@@ -134,20 +137,35 @@ export async function updateCardContentWithThumbnail(
     );
 
     const attachableSgid = attachmentResponse.data.attachable_sgid;
+    console.log(`[CardContent] Attachment uploaded successfully, sgid: ${attachableSgid.substring(0, 20)}...`);
 
     // Construct rich text content with <bc-attachment> tag
     const content = `<bc-attachment sgid="${attachableSgid}"></bc-attachment>`;
 
-    // Update card's content field (replaces existing content entirely)
+    // Update card's description field with rich text content (replaces existing description entirely)
+    // Note: Basecamp card table cards use "description" for rich text content, not "content"
     // Preserve due_on field if it exists
-    await updateCardTableCard(basecampClient, projectId, cardId, {
-      content,
+    const updatePayload = {
+      description: content,
       ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
+    };
+    console.log(`[CardContent] Updating card ${cardId} with payload:`, {
+      hasDescription: !!updatePayload.description,
+      hasDueOn: updatePayload.due_on !== undefined,
+      descriptionLength: updatePayload.description?.length,
     });
+    
+    await updateCardTableCard(basecampClient, projectId, cardId, updatePayload);
 
     console.log(`[CardContent] Successfully updated card ${cardId} with thumbnail attachment`);
   } catch (error) {
-    console.warn(`[CardContent] Failed to update card content with thumbnail:`, error);
+    console.error(`[CardContent] Failed to update card content with thumbnail:`, error);
+    console.error(`[CardContent] Error details:`, {
+      message: error && typeof error === 'object' && 'message' in error ? error.message : String(error),
+      status: error && typeof error === 'object' && 'status' in error ? error.status : undefined,
+      cardId,
+      projectId,
+    });
     // Update content with empty string on failure as per plan (option b)
     // Try to preserve due_on if we can fetch the current card
     try {
@@ -160,7 +178,7 @@ export async function updateCardContentWithThumbnail(
       }
       
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        content: "",
+        description: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
     } catch (updateError) {
