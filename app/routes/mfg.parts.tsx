@@ -20,8 +20,7 @@ import { useState } from "react";
  */
 function PartCard({ part }: { part: BtPartMetadataInfo }) {
   // Get thumbnail from multiple possible sources
-  const thumbnailHref = part.thumbnailInfo?.href || 
-    part.thumbnailInfo?.sizes?.[0]?.href;
+  const thumbnailHref = part.thumbnailInfo?.sizes?.[0]?.href;
   const [thumbnailError, setThumbnailError] = useState(false);
   const [isJsonDialogOpen, setIsJsonDialogOpen] = useState(false);
   const jsonString = JSON.stringify(part, null, 2);
