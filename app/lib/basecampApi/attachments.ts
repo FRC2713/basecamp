@@ -14,14 +14,17 @@ export interface AttachmentResponse {
 
 /**
  * Create an attachment by uploading a file
- * POST /buckets/{project_id}/attachments.json
+ * POST /attachments.json
+ * 
+ * Note: Attachments are uploaded at the account level, not the bucket/project level.
+ * Example: https://3.basecampapi.com/{account_id}/attachments.json?name=filename.png
  * 
  * Required request data: The request body should be the file's raw binary data.
  * Required request headers: Content-Type and Content-Length for the file.
  * Required URI query parameters: name as the file name.
  * 
  * @param client - BasecampClient instance
- * @param projectId - The project/bucket ID
+ * @param projectId - The project/bucket ID (unused, kept for API compatibility)
  * @param fileBuffer - The file's raw binary data as ArrayBuffer, Blob, or Uint8Array
  * @param filename - The filename (required query parameter)
  * @param contentType - The Content-Type header (e.g., "image/png", "image/jpeg")
@@ -34,8 +37,9 @@ export async function createAttachment(
   filename: string,
   contentType: string
 ): Promise<BasecampResponse<AttachmentResponse>> {
+  // Attachments are uploaded at account level, not bucket level
   return client.uploadBinary<AttachmentResponse>(
-    `/buckets/${projectId}/attachments.json`,
+    `/attachments.json`,
     fileBuffer,
     contentType,
     filename
