@@ -1,6 +1,10 @@
 import type { Route } from "./+types/mfg.parts";
 import { redirect, useNavigation, useFetcher, useRevalidator } from "react-router";
-import { isOnshapeAuthenticated } from "~/lib/session";
+import { getSession, isOnshapeAuthenticated, isBasecampAuthenticated, commitSession } from "~/lib/session";
+import { refreshBasecampTokenIfNeededWithSession } from "~/lib/tokenRefresh";
+import { BasecampClient } from "~/lib/basecampApi/client";
+import { getCardTable, type CardTableColumn } from "~/lib/basecampApi/cardTables";
+import { getAllCardsInColumn, createCardTableCard, moveCardTableCard, type CardTableCard } from "~/lib/basecampApi/cardTableCards";
 import { createOnshapeApiClient, getPartsWmve, getElementsInDocument, getWmvepMetadata, updateWvepMetadata, type BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
@@ -15,6 +19,13 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Skeleton } from "~/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { AlertCircle, Box, Code } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -42,9 +53,121 @@ function PartCardSkeleton() {
 }
 
 /**
+ * Component to display manufacturing tracking state for a part
+ */
+function PartMfgState({ 
+  part, 
+  cards, 
+  columns 
+}: { 
+  part: BtPartMetadataInfo; 
+  cards: Array<CardTableCard & { listTitle?: string; columnId?: number }>; 
+  columns: CardTableColumn[];
+}) {
+  const fetcher = useFetcher();
+  const revalidator = useRevalidator();
+
+  // Handle successful card operations
+  useEffect(() => {
+    if (fetcher.data?.success) {
+      revalidator.revalidate();
+    }
+  }, [fetcher.data, revalidator]);
+
+  // Don't show anything if part has no part number
+  if (!part.partNumber) {
+    return null;
+  }
+
+  // Find card with matching title (exact match)
+  const matchingCard = cards.find(card => card.title === part.partNumber);
+
+  // Find current column if card exists
+  const currentColumn = matchingCard 
+    ? columns.find(col => {
+        const columnIdNum = Number(col.id);
+        const cardParentId = matchingCard.parent?.id;
+        const cardColumnId = matchingCard.columnId;
+        return (cardParentId !== undefined && Number(cardParentId) === columnIdNum) ||
+               (cardColumnId !== undefined && Number(cardColumnId) === columnIdNum);
+      })
+    : null;
+
+  // If card not found, show "Add to manufacturing tracker" button
+  if (!matchingCard) {
+    return (
+      <div className="space-y-2">
+        <fetcher.Form method="post">
+          <input type="hidden" name="action" value="addCard" />
+          <input type="hidden" name="partNumber" value={part.partNumber} />
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            className="w-full"
+            disabled={fetcher.state === "submitting"}
+          >
+            {fetcher.state === "submitting" ? "Adding..." : "Add to manufacturing tracker"}
+          </Button>
+        </fetcher.Form>
+        {fetcher.data && !fetcher.data.success && fetcher.data.error && (
+          <p className="text-xs text-destructive">{fetcher.data.error}</p>
+        )}
+      </div>
+    );
+  }
+
+  // If card found, show dropdown with column selection
+  const handleColumnChange = (newColumnId: string) => {
+    const formData = new FormData();
+    formData.append("action", "moveCard");
+    formData.append("cardId", matchingCard.id.toString());
+    formData.append("columnId", newColumnId);
+    fetcher.submit(formData, { method: "post" });
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">Manufacturing State:</Label>
+      <Select
+        value={currentColumn?.id.toString() || ""}
+        onValueChange={handleColumnChange}
+        disabled={fetcher.state === "submitting"}
+      >
+        <SelectTrigger className="w-full h-8">
+          <SelectValue placeholder="Select column...">
+            {currentColumn?.title || "Select column..."}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {columns.map((column) => (
+            <SelectItem key={column.id} value={column.id.toString()}>
+              {column.title}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {fetcher.data && !fetcher.data.success && fetcher.data.error && (
+        <p className="text-xs text-destructive">{fetcher.data.error}</p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Component to display a single part with thumbnail error handling
  */
-function PartCard({ part, queryParams }: { part: BtPartMetadataInfo; queryParams: { documentId: string | null; instanceType: string; instanceId: string | null; elementId: string | null; elementType?: string | null } }) {
+function PartCard({ 
+  part, 
+  queryParams,
+  cards,
+  columns
+}: { 
+  part: BtPartMetadataInfo; 
+  queryParams: { documentId: string | null; instanceType: string; instanceId: string | null; elementId: string | null; elementType?: string | null };
+  cards: Array<CardTableCard & { listTitle?: string; columnId?: number }>;
+  columns: CardTableColumn[];
+}) {
   // Always prefer 300x300 thumbnail from sizes array
   // The main href is just a JSON link, not an image
   const rawThumbnailUrl = part.thumbnailInfo?.sizes?.find(s => s.size === "300x300")?.href ||
@@ -188,8 +311,8 @@ function PartCard({ part, queryParams }: { part: BtPartMetadataInfo; queryParams
           />
         </div>
       )}
-      <CardContent>
-        {/* Empty content for spacing */}
+      <CardContent className="space-y-4">
+        <PartMfgState part={part} cards={cards} columns={columns} />
       </CardContent>
     </Card>
   );
@@ -203,6 +326,111 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const session = await getSession(request);
+  const formData = await request.formData();
+  const actionType = formData.get("action")?.toString();
+
+  // Handle Basecamp card operations (addCard, moveCard)
+  if (actionType === "addCard" || actionType === "moveCard") {
+    // Check Basecamp authentication
+    const basecampAuthenticated = await isBasecampAuthenticated(request);
+    if (!basecampAuthenticated) {
+      return { success: false, error: "Please authenticate with Basecamp first", redirect: "/auth" };
+    }
+
+    try {
+      await refreshBasecampTokenIfNeededWithSession(session);
+      const accessToken = session.get("accessToken");
+      if (!accessToken) {
+        return { success: false, error: "Not authenticated", redirect: "/auth" };
+      }
+
+      const cookie = await commitSession(session);
+      const sessionAccountId = session.get("accountId");
+      const envAccountId = process.env.BASECAMP_ACCOUNT_ID;
+      const accountId = sessionAccountId || envAccountId;
+      const projectId = process.env.BASECAMP_PROJECT_ID;
+      const cardTableId = process.env.BASECAMP_CARD_TABLE_ID;
+
+      if (!accountId || !projectId || !cardTableId) {
+        return { success: false, error: "Basecamp configuration not found" };
+      }
+
+      const client = new BasecampClient({
+        accessToken,
+        accountId: String(accountId),
+        userAgent: "Basecamp Integration",
+      });
+
+      if (actionType === "addCard") {
+        // Add card to tracker
+        const partNumber = formData.get("partNumber")?.toString();
+        if (!partNumber) {
+          return { success: false, error: "Part number is required" };
+        }
+
+        // Get card table to find columns
+        const cardTableResponse = await getCardTable(client, projectId, cardTableId);
+        const allColumns = cardTableResponse.data.lists || [];
+        
+        // Find column with lowest position value
+        const columnsWithPosition = allColumns.filter(col => col.position !== undefined);
+        let targetColumn;
+        
+        if (columnsWithPosition.length > 0) {
+          // Sort by position and take the one with lowest position
+          targetColumn = columnsWithPosition.sort((a, b) => 
+            (a.position || Infinity) - (b.position || Infinity)
+          )[0];
+        } else {
+          // Fallback: try to find Triage column, otherwise use first column
+          targetColumn = allColumns.find(
+            col => col.title?.toLowerCase() === "triage column" || col.title?.toLowerCase() === "triage"
+          ) || allColumns[0];
+        }
+
+        if (!targetColumn) {
+          return { success: false, error: "No columns found in card table" };
+        }
+
+        await createCardTableCard(client, projectId, targetColumn.id, {
+          title: partNumber,
+        });
+
+        return { 
+          success: true,
+          headers: {
+            "Set-Cookie": cookie,
+          },
+        };
+      } else if (actionType === "moveCard") {
+        // Move card to different column
+        const cardId = formData.get("cardId")?.toString();
+        const columnId = formData.get("columnId")?.toString();
+
+        if (!cardId || !columnId) {
+          return { success: false, error: "Card ID and column ID are required" };
+        }
+
+        await moveCardTableCard(client, projectId, cardId, columnId);
+
+        return { 
+          success: true,
+          headers: {
+            "Set-Cookie": cookie,
+          },
+        };
+      }
+    } catch (error: unknown) {
+      console.error("Error in Basecamp card operation:", error);
+      const errorMessage = error && typeof error === "object" && "message" in error
+        ? String(error.message)
+        : "Failed to perform card operation";
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  // Handle part number update (original functionality)
   console.log("[ACTION] Starting part number update");
   
   // Check Onshape authentication (required)
@@ -213,7 +441,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   try {
-    const formData = await request.formData();
     const partId = formData.get("partId")?.toString();
     const partNumber = formData.get("partNumber")?.toString();
     const documentId = formData.get("documentId")?.toString();
@@ -378,10 +605,74 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  const session = await getSession(request);
+  
   // Check Onshape authentication (required)
   const onshapeAuthenticated = await isOnshapeAuthenticated(request);
   if (!onshapeAuthenticated) {
     return redirect("/auth/onshape?redirect=/mfg/parts");
+  }
+
+  // Check Basecamp authentication (optional - page still works without it)
+  let basecampCards: Array<CardTableCard & { listTitle?: string; columnId?: number }> = [];
+  let basecampColumns: CardTableColumn[] = [];
+  let basecampError: string | null = null;
+  
+  const basecampAuthenticated = await isBasecampAuthenticated(request);
+  if (basecampAuthenticated) {
+    try {
+      await refreshBasecampTokenIfNeededWithSession(session);
+      const accessToken = session.get("accessToken");
+      const sessionAccountId = session.get("accountId");
+      const envAccountId = process.env.BASECAMP_ACCOUNT_ID;
+      const accountId = sessionAccountId || envAccountId;
+      const projectId = process.env.BASECAMP_PROJECT_ID;
+      const cardTableId = process.env.BASECAMP_CARD_TABLE_ID;
+
+      if (accessToken && accountId && projectId && cardTableId) {
+        const client = new BasecampClient({
+          accessToken,
+          accountId: String(accountId),
+          userAgent: "Basecamp Integration",
+        });
+
+        // Get card table and columns
+        const cardTableResponse = await getCardTable(client, projectId, cardTableId);
+        const cardTable = cardTableResponse.data;
+        
+        // Extract and sort columns
+        const allColumns = cardTable.lists || [];
+        const columns = [...allColumns].sort((a, b) => {
+          if (a.position !== undefined && b.position !== undefined) {
+            return a.position - b.position;
+          }
+          if (a.position !== undefined) return -1;
+          if (b.position !== undefined) return 1;
+          return 0;
+        });
+        basecampColumns = columns;
+
+        // Get all cards from all columns
+        for (const column of columns) {
+          try {
+            const cards = await getAllCardsInColumn(client, projectId, column.id);
+            const cardsWithList = cards.map(card => ({
+              ...card,
+              listTitle: column.title,
+              columnId: column.id,
+            }));
+            basecampCards.push(...cardsWithList);
+          } catch (error) {
+            console.warn(`Failed to fetch cards from column "${column.title}":`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to fetch Basecamp card data:", error);
+      basecampError = error && typeof error === "object" && "message" in error
+        ? String(error.message)
+        : "Unknown error";
+    }
   }
 
   // Extract query parameters
@@ -485,6 +776,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     // Extract parts from response (response.data is an array of BtPartMetadataInfo)
     const parts = partsResult.value.data || [];
 
+    const cookie = await commitSession(session);
+
     return {
       parts,
       partStudioName,
@@ -496,6 +789,12 @@ export async function loader({ request }: Route.LoaderArgs) {
         elementType,
       },
       error: null,
+      basecampCards,
+      basecampColumns,
+      basecampError,
+      headers: {
+        "Set-Cookie": cookie,
+      },
     };
   } catch (error: unknown) {
     console.error("Error fetching parts from Onshape:", error);
@@ -547,12 +846,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
       error: detailedError,
       exampleUrl: "/mfg/parts?elementType=PARTSTUDIO&documentId={$documentId}&instanceType={$workspaceOrVersion}&instanceId={$workspaceOrVersionId}&elementId={$elementId}",
+      basecampCards: [],
+      basecampColumns: [],
+      basecampError: null,
     };
   }
 }
 
 export default function MfgParts({ loaderData }: Route.ComponentProps) {
-  const { parts, partStudioName, queryParams, error, exampleUrl } = loaderData;
+  const { parts, partStudioName, queryParams, error, exampleUrl, basecampCards, basecampColumns } = loaderData;
   const navigation = useNavigation();
   const isLoading = navigation.state === "loading";
 
@@ -648,6 +950,8 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
                   key={part.partId || part.id || part.partIdentity || JSON.stringify(part)} 
                   part={part} 
                   queryParams={queryParams}
+                  cards={basecampCards || []}
+                  columns={basecampColumns || []}
                 />
               ))}
             </div>
