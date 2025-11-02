@@ -1,5 +1,5 @@
 import type { Route } from "./+types/_layout";
-import { Outlet, useLocation, Link } from "react-router";
+import { Outlet, useLocation, Link, useRouter } from "react-router";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -8,7 +8,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "~/components/ui/breadcrumb";
-import { Home } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Home, RefreshCw } from "lucide-react";
 
 function getBreadcrumbs(pathname: string) {
   const paths = pathname.split("/").filter(Boolean);
@@ -49,13 +50,18 @@ function getBreadcrumbs(pathname: string) {
 
 export default function Layout() {
   const location = useLocation();
+  const router = useRouter();
   const breadcrumbs = getBreadcrumbs(location.pathname);
+
+  const handleRefresh = () => {
+    router.revalidate();
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Breadcrumbs */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto px-4 py-3">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Breadcrumb>
             <BreadcrumbList>
               {breadcrumbs.map((crumb, index) => {
@@ -96,6 +102,15 @@ export default function Layout() {
               })}
             </BreadcrumbList>
           </Breadcrumb>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleRefresh}
+            className="h-8"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
       </div>
 
