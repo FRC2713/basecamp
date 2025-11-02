@@ -19,7 +19,9 @@ import { useState } from "react";
  * Component to display a single part with thumbnail error handling
  */
 function PartCard({ part }: { part: BtPartMetadataInfo }) {
-  const thumbnailHref = part.thumbnailInfo?.href;
+  // Get thumbnail from multiple possible sources
+  const thumbnailHref = part.thumbnailInfo?.href || 
+    part.thumbnailInfo?.sizes?.[0]?.href;
   const [thumbnailError, setThumbnailError] = useState(false);
   const [isJsonDialogOpen, setIsJsonDialogOpen] = useState(false);
   const jsonString = JSON.stringify(part, null, 2);
@@ -57,37 +59,25 @@ function PartCard({ part }: { part: BtPartMetadataInfo }) {
             </Dialog>
           </div>
         </div>
-        {part.name && part.partId && (
+        {part.partNumber && (
           <CardDescription>
-            Part ID: <code className="text-xs">{part.partId}</code>
+            Part Number: <code className="text-xs">{part.partNumber}</code>
           </CardDescription>
         )}
-        {thumbnailHref && !thumbnailError && (
-          <div className="mt-2">
-            <img
-              src={thumbnailHref}
-              alt={`Thumbnail for ${part.name || part.partId || part.id || 'part'}`}
-              className="w-full h-auto rounded border"
-              onError={() => setThumbnailError(true)}
-              style={{ maxHeight: '200px', objectFit: 'contain' }}
-            />
-          </div>
-        )}
       </CardHeader>
+      {thumbnailHref && !thumbnailError && (
+        <div className="px-6 pb-4">
+          <img
+            src={thumbnailHref}
+            alt={`Thumbnail for ${part.name || part.partId || part.id || 'part'}`}
+            className="w-full h-auto rounded border bg-muted"
+            onError={() => setThumbnailError(true)}
+            style={{ maxHeight: '300px', objectFit: 'contain' }}
+          />
+        </div>
+      )}
       <CardContent>
         <div className="space-y-2 text-sm text-muted-foreground">
-          {part.bodyType && (
-            <div>
-              <span className="font-semibold">Body Type:</span>{" "}
-              <Badge variant="outline">{part.bodyType}</Badge>
-            </div>
-          )}
-          {part.isMesh !== undefined && (
-            <div>
-              <span className="font-semibold">Type:</span>{" "}
-              {part.isMesh ? "Mesh" : "Solid"}
-            </div>
-          )}
           {part.appearance && (
             <div>
               <span className="font-semibold">Appearance:</span>{" "}
@@ -98,12 +88,6 @@ function PartCard({ part }: { part: BtPartMetadataInfo }) {
                       }}
                 />
               )}
-            </div>
-          )}
-          {part.microversionId && (
-            <div className="text-xs">
-              <span className="font-semibold">Microversion:</span>{" "}
-              <code className="bg-muted px-1 rounded">{part.microversionId}</code>
             </div>
           )}
         </div>
