@@ -1,5 +1,5 @@
 import type { Route } from "./+types/mfg.parts";
-import { redirect } from "react-router";
+import { redirect, useNavigation } from "react-router";
 import { isOnshapeAuthenticated } from "~/lib/session";
 import { createOnshapeApiClient, getPartsWmve, getElementsInDocument, type BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
-import { AlertCircle, Box, Code } from "lucide-react";
+import { AlertCircle, Box, Code, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -264,6 +264,22 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export default function MfgParts({ loaderData }: Route.ComponentProps) {
   const { parts, partStudioName, queryParams, error, exampleUrl } = loaderData;
+  const navigation = useNavigation();
+  const isLoading = navigation.state === "loading";
+
+  // Show loading screen while data is being fetched
+  if (isLoading) {
+    return (
+      <main className="container mx-auto py-8 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Loading parts...</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="container mx-auto py-8 px-4">

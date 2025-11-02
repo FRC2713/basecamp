@@ -1,5 +1,5 @@
 import type { Route } from "./+types/_layout";
-import { Outlet, useLocation, Link, useRouter } from "react-router";
+import { Outlet, useLocation, Link, useRevalidator } from "react-router";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -50,11 +50,11 @@ function getBreadcrumbs(pathname: string) {
 
 export default function Layout() {
   const location = useLocation();
-  const router = useRouter();
+  const revalidator = useRevalidator();
   const breadcrumbs = getBreadcrumbs(location.pathname);
 
   const handleRefresh = () => {
-    router.revalidate();
+    revalidator.revalidate();
   };
 
   return (
