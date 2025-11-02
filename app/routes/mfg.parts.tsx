@@ -159,10 +159,18 @@ function PartMfgState({
 
   // If card found, show dropdown with column selection and badge
   const handleColumnChange = (newColumnId: string) => {
+    console.log("[PartMfgState] Column change:", {
+      cardId: matchingCard.id,
+      cardIdType: typeof matchingCard.id,
+      newColumnId,
+      newColumnIdType: typeof newColumnId,
+      matchingCard,
+    });
+
     const formData = new FormData();
     formData.append("action", "moveCard");
-    formData.append("cardId", matchingCard.id.toString());
-    formData.append("columnId", newColumnId);
+    formData.append("cardId", String(matchingCard.id));
+    formData.append("columnId", String(newColumnId));
     fetcher.submit(formData, { method: "post" });
   };
 
@@ -452,11 +460,61 @@ export async function action({ request }: Route.ActionArgs) {
         const cardId = formData.get("cardId")?.toString();
         const columnId = formData.get("columnId")?.toString();
 
+        console.log("[ACTION] Move card request:", {
+          cardId,
+          columnId,
+          cardIdType: typeof cardId,
+          columnIdType: typeof columnId,
+          projectId,
+          cardTableId,
+        });
+
         if (!cardId || !columnId) {
           return { success: false, error: "Card ID and column ID are required" };
         }
 
-        await moveCardTableCard(client, projectId, cardId, columnId);
+        // Ensure IDs are valid numbers
+        const cardIdNum = Number(cardId);
+        const columnIdNum = Number(columnId);
+
+        if (isNaN(cardIdNum) || isNaN(columnIdNum)) {
+          console.error("[ACTION] Invalid ID format:", { cardIdNum, columnIdNum });
+          return { success: false, error: `Invalid ID format: cardId=${cardId}, columnId=${columnId}` };
+        }
+
+        console.log("[ACTION] Calling moveCardTableCard with:", {
+          projectId,
+          cardId: cardIdNum,
+          destinationColumnId: columnIdNum,
+        });
+
+        try {
+          const result = await moveCardTableCard(client, projectId, cardIdNum, columnIdNum);
+          console.log("[ACTION] Move card successful:", result);
+        } catch (moveError: unknown) {
+          console.error("[ACTION] Move card API error:", moveError);
+          
+          // Log detailed error information
+          if (moveError && typeof moveError === "object") {
+            if ("response" in moveError && moveError.response) {
+              console.error("[ACTION] Error response:", moveError.response);
+              if (typeof moveError.response === "object" && "data" in moveError.response) {
+                console.error("[ACTION] Error response data:", moveError.response.data);
+              }
+              if (typeof moveError.response === "object" && "status" in moveError.response) {
+                console.error("[ACTION] Error status:", moveError.response.status);
+              }
+            }
+            if ("status" in moveError) {
+              console.error("[ACTION] Error status:", moveError.status);
+            }
+            if ("message" in moveError) {
+              console.error("[ACTION] Error message:", moveError.message);
+            }
+          }
+          
+          throw moveError; // Re-throw to be caught by outer catch
+        }
 
         return { 
           success: true,
@@ -467,10 +525,46 @@ export async function action({ request }: Route.ActionArgs) {
       }
     } catch (error: unknown) {
       console.error("Error in Basecamp card operation:", error);
-      const errorMessage = error && typeof error === "object" && "message" in error
-        ? String(error.message)
-        : "Failed to perform card operation";
-      return { success: false, error: errorMessage };
+      
+      let errorMessage = "Failed to perform card operation";
+      let errorDetails: any = {};
+      
+      if (error && typeof error === "object") {
+        if ("message" in error) {
+          errorMessage = String(error.message);
+        }
+        if ("status" in error) {
+          errorDetails.status = error.status;
+        }
+        if ("response" in error && error.response) {
+          errorDetails.response = error.response;
+          try {
+            if (typeof error.response === "object" && "data" in error.response) {
+              errorDetails.responseData = error.response.data;
+              // Try to extract a more detailed error message
+              if (typeof error.response.data === "object" && error.response.data !== null) {
+                if ("error" in error.response.data) {
+                  errorMessage = String(error.response.data.error);
+                } else if ("message" in error.response.data) {
+                  errorMessage = String(error.response.data.message);
+                }
+              }
+            }
+            if (typeof error.response === "object" && "status" in error.response) {
+              errorDetails.status = error.response.status;
+            }
+          } catch (e) {
+            // Ignore parsing errors
+          }
+        }
+      }
+      
+      console.error("[ACTION] Error details:", errorDetails);
+      
+      return { 
+        success: false, 
+        error: `${errorMessage}${errorDetails.status ? ` (Status: ${errorDetails.status})` : ""}` 
+      };
     }
   }
 
