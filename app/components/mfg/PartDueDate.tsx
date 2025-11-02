@@ -1,6 +1,6 @@
 import { useFetcher, useRevalidator } from "react-router";
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { useEffect, useState, useMemo, useRef } from "react";
+import { format, parseISO } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
@@ -22,33 +22,92 @@ interface PartDueDateProps {
 /**
  * Component to display and edit the due date for a card
  */
+/**
+ * Parse a date string from Basecamp (ISO 8601) as a local date
+ * Basecamp returns dates like "2024-01-15" which should be treated as local dates, not UTC
+ */
+function parseLocalDate(dateString: string): Date {
+  // If it's just a date (YYYY-MM-DD), parse it as local time to avoid timezone issues
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  // If it has time information, parse it normally
+  return parseISO(dateString);
+}
+
 export function PartDueDate({ card }: PartDueDateProps) {
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
   const [open, setOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(
-    card.due_on ? new Date(card.due_on) : undefined
-  );
+  
+  // Parse the card's due_on date only when it actually changes
+  const cardDueDate = useMemo(() => {
+    if (!card.due_on) return undefined;
+    try {
+      return parseLocalDate(card.due_on);
+    } catch (e) {
+      console.error("Error parsing due date:", card.due_on, e);
+      return undefined;
+    }
+  }, [card.due_on]);
+  
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(cardDueDate);
+  const hasRevalidatedRef = useRef(false);
+  const lastSubmittedDateRef = useRef<string | null>(null);
+
+  // Update selectedDate only when cardDueDate actually changes (but not during user edits)
+  useEffect(() => {
+    // Don't update if we just submitted a date (let it come back from the server)
+    if (lastSubmittedDateRef.current !== null) {
+      const submittedDateStr = lastSubmittedDateRef.current;
+      const cardDateStr = cardDueDate ? format(cardDueDate, "yyyy-MM-dd") : "";
+      
+      // Only update if the card date matches what we submitted (update complete)
+      // Handle both cases: clearing (empty string) and setting a date
+      if (submittedDateStr === cardDateStr) {
+        lastSubmittedDateRef.current = null;
+        hasRevalidatedRef.current = false;
+      } else {
+        // Still waiting for the update to propagate
+        return;
+      }
+    }
+    
+    if (fetcher.state !== "idle") {
+      return;
+    }
+    
+    // Compare dates by their date-only values to avoid unnecessary updates
+    const currentDateStr = selectedDate ? format(selectedDate, "yyyy-MM-dd") : "";
+    const cardDateStr = cardDueDate ? format(cardDueDate, "yyyy-MM-dd") : "";
+    
+    if (currentDateStr !== cardDateStr) {
+      setSelectedDate(cardDueDate);
+    }
+  }, [cardDueDate, selectedDate, fetcher.state]);
 
   // Handle successful due date updates
   useEffect(() => {
-    if (fetcher.data?.success) {
-      revalidator.revalidate();
+    if (fetcher.data?.success && fetcher.state === "idle" && !hasRevalidatedRef.current) {
+      hasRevalidatedRef.current = true;
       setOpen(false);
+      // Only revalidate once after successful submission
+      setTimeout(() => {
+        revalidator.revalidate();
+      }, 100);
     }
-  }, [fetcher.data, revalidator]);
-
-  // Update selectedDate when card.due_on changes
-  useEffect(() => {
-    setSelectedDate(card.due_on ? new Date(card.due_on) : undefined);
-  }, [card.due_on]);
+  }, [fetcher.data?.success, fetcher.state, revalidator]);
 
   const handleDateSelect = (date: Date | undefined) => {
-    setSelectedDate(date);
-    
     if (date) {
+      setSelectedDate(date);
       // Format date as ISO 8601 (YYYY-MM-DD)
       const isoDate = format(date, "yyyy-MM-dd");
+      
+      // Track what we're submitting to avoid race conditions
+      lastSubmittedDateRef.current = isoDate;
+      hasRevalidatedRef.current = false;
       
       const formData = new FormData();
       formData.append("action", "updateDueDate");
@@ -61,6 +120,10 @@ export function PartDueDate({ card }: PartDueDateProps) {
 
   const handleClearDate = () => {
     setSelectedDate(undefined);
+    
+    // Track that we're clearing the date
+    lastSubmittedDateRef.current = "";
+    hasRevalidatedRef.current = false;
     
     const formData = new FormData();
     formData.append("action", "updateDueDate");
