@@ -1,5 +1,5 @@
 import { useFetcher, useRevalidator } from "react-router";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import {
@@ -30,13 +30,25 @@ interface PartMfgStateProps {
 export function PartMfgState({ part, queryParams, cards, columns }: PartMfgStateProps) {
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
+  const hasRevalidatedRef = useRef(false);
+
+  // Reset revalidation flag when starting a new operation
+  useEffect(() => {
+    if (fetcher.state === "submitting") {
+      hasRevalidatedRef.current = false;
+    }
+  }, [fetcher.state]);
 
   // Handle successful card operations
   useEffect(() => {
-    if (fetcher.data?.success) {
-      revalidator.revalidate();
+    if (fetcher.data?.success && fetcher.state === "idle" && !hasRevalidatedRef.current) {
+      hasRevalidatedRef.current = true;
+      // Only revalidate once after successful submission
+      setTimeout(() => {
+        revalidator.revalidate();
+      }, 100);
     }
-  }, [fetcher.data, revalidator]);
+  }, [fetcher.data?.success, fetcher.state, revalidator]);
 
   // Don't show anything if part has no part number
   if (!part.partNumber) {

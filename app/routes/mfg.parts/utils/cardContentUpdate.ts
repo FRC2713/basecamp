@@ -42,10 +42,8 @@ export async function updateCardContentWithThumbnail(
     // First, get the current card to preserve existing fields like due_on
     let currentCard;
     try {
-      console.log(`[CardContent] Fetching current card ${cardId}...`);
       const cardResponse = await getCardTableCard(basecampClient, projectId, cardId);
       currentCard = cardResponse.data;
-      console.log(`[CardContent] Successfully fetched card ${cardId}`);
     } catch (error) {
       console.warn(`[CardContent] Failed to fetch current card data:`, error);
       // Continue anyway - we'll update without preserving due_on
@@ -127,7 +125,6 @@ export async function updateCardContentWithThumbnail(
     const filename = `${partName.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.${extension}`;
 
     // Upload attachment to Basecamp
-    console.log(`[CardContent] Uploading attachment to Basecamp...`);
     const attachmentResponse = await createAttachment(
       basecampClient,
       projectId,
@@ -137,10 +134,24 @@ export async function updateCardContentWithThumbnail(
     );
 
     const attachableSgid = attachmentResponse.data.attachable_sgid;
-    console.log(`[CardContent] Attachment uploaded successfully, sgid: ${attachableSgid.substring(0, 20)}...`);
 
-    // Construct rich text content with <bc-attachment> tag
-    const content = `<bc-attachment sgid="${attachableSgid}"></bc-attachment>`;
+    // Construct Onshape document URL
+    // Format: https://cad.onshape.com/documents/{documentId}/{w|v|m}/{instanceId}/e/{elementId}
+    const onshapeUrl = `https://cad.onshape.com/documents/${partMetadata.documentId}/${partMetadata.instanceType}/${partMetadata.instanceId}/e/${partMetadata.elementId}`;
+    
+    // Get material displayName or "none" if not defined
+    const materialDisplayName = part.material?.displayName || "none";
+    
+    // Construct rich text content with <bc-attachment> tag, material, and link to Onshape document
+    // Use <br> tag for line break as per Basecamp rich text format
+    // Escape HTML entities in material name
+    const escapedMaterial = materialDisplayName
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+    const content = `<bc-attachment sgid="${attachableSgid}"></bc-attachment><br>Material: ${escapedMaterial}<br><a href="${onshapeUrl}">View in Onshape</a>`;
 
     // Update card's content field with rich text content (replaces existing content entirely)
     // Preserve due_on field if it exists
@@ -148,23 +159,10 @@ export async function updateCardContentWithThumbnail(
       content,
       ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
     };
-    console.log(`[CardContent] Updating card ${cardId} with payload:`, {
-      hasContent: !!updatePayload.content,
-      hasDueOn: updatePayload.due_on !== undefined,
-      contentLength: updatePayload.content?.length,
-    });
     
     await updateCardTableCard(basecampClient, projectId, cardId, updatePayload);
-
-    console.log(`[CardContent] Successfully updated card ${cardId} with thumbnail attachment`);
   } catch (error) {
     console.error(`[CardContent] Failed to update card content with thumbnail:`, error);
-    console.error(`[CardContent] Error details:`, {
-      message: error && typeof error === 'object' && 'message' in error ? error.message : String(error),
-      status: error && typeof error === 'object' && 'status' in error ? error.status : undefined,
-      cardId,
-      projectId,
-    });
     // Update content with empty string on failure as per plan (option b)
     // Try to preserve due_on if we can fetch the current card
     try {

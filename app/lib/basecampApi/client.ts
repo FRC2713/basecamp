@@ -373,8 +373,6 @@ export class BasecampClient {
     const urlObj = new URL(finalUrl);
     urlObj.searchParams.set("name", filename);
     const finalUrlWithParams = urlObj.toString();
-    
-    console.log(`[BasecampClient] uploadBinary - URL: ${finalUrlWithParams}`);
 
     // Convert binary data to ArrayBuffer if needed
     let buffer: ArrayBuffer;
@@ -423,23 +421,10 @@ export class BasecampClient {
           errorMessage = errorData.message || errorData.error;
         }
       } catch {
-        // If response isn't JSON, try to get text
-        try {
-          const text = await response.text();
-          console.error(`[BasecampClient] uploadBinary error response text:`, text);
-        } catch {
-          // If response isn't JSON, use default message
-        }
+        // If response isn't JSON, use default message
       }
       
       const reason = response.headers.get("Reason");
-      console.error(`[BasecampClient] uploadBinary failed:`, {
-        status: response.status,
-        reason,
-        errorMessage,
-        errorData,
-        url: finalUrlWithParams,
-      });
 
       throw {
         message: errorMessage,
