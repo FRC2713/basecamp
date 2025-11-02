@@ -74,9 +74,9 @@ export async function updateCardContentWithThumbnail(
 
     if (!part) {
       console.warn(`[CardContent] Part not found: ${partMetadata.partId}`);
-      // Update description with empty string as per plan (option b), preserving due_on
+      // Update content with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        description: "",
+        content: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
@@ -90,9 +90,9 @@ export async function updateCardContentWithThumbnail(
 
     if (!thumbnailUrl) {
       console.warn(`[CardContent] No thumbnail URL found for part ${partMetadata.partId}`);
-      // Update description with empty string as per plan (option b), preserving due_on
+      // Update content with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        description: "",
+        content: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
@@ -107,9 +107,9 @@ export async function updateCardContentWithThumbnail(
 
     if (!thumbnailResponse.ok) {
       console.warn(`[CardContent] Failed to fetch thumbnail: ${thumbnailResponse.status}`);
-      // Update description with empty string as per plan (option b), preserving due_on
+      // Update content with empty string as per plan (option b), preserving due_on
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        description: "",
+        content: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
       return;
@@ -142,17 +142,16 @@ export async function updateCardContentWithThumbnail(
     // Construct rich text content with <bc-attachment> tag
     const content = `<bc-attachment sgid="${attachableSgid}"></bc-attachment>`;
 
-    // Update card's description field with rich text content (replaces existing description entirely)
-    // Note: Basecamp card table cards use "description" for rich text content, not "content"
+    // Update card's content field with rich text content (replaces existing content entirely)
     // Preserve due_on field if it exists
     const updatePayload = {
-      description: content,
+      content,
       ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
     };
     console.log(`[CardContent] Updating card ${cardId} with payload:`, {
-      hasDescription: !!updatePayload.description,
+      hasContent: !!updatePayload.content,
       hasDueOn: updatePayload.due_on !== undefined,
-      descriptionLength: updatePayload.description?.length,
+      contentLength: updatePayload.content?.length,
     });
     
     await updateCardTableCard(basecampClient, projectId, cardId, updatePayload);
@@ -178,7 +177,7 @@ export async function updateCardContentWithThumbnail(
       }
       
       await updateCardTableCard(basecampClient, projectId, cardId, {
-        description: "",
+        content: "",
         ...(currentCard?.due_on !== undefined && { due_on: currentCard.due_on }),
       });
     } catch (updateError) {
