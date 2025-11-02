@@ -117,7 +117,7 @@ function PartMfgState({
     );
   }
 
-  // If card found, show dropdown with column selection
+  // If card found, show dropdown with column selection and badge
   const handleColumnChange = (newColumnId: string) => {
     const formData = new FormData();
     formData.append("action", "moveCard");
@@ -129,6 +129,17 @@ function PartMfgState({
   return (
     <div className="space-y-2">
       <Label className="text-xs">Manufacturing State:</Label>
+      {currentColumn && (
+        <Badge
+          style={{
+            backgroundColor: currentColumn.color || undefined,
+            color: currentColumn.color ? "#fff" : undefined,
+          }}
+          className="mb-2"
+        >
+          {currentColumn.title}
+        </Badge>
+      )}
       <Select
         value={currentColumn?.id.toString() || ""}
         onValueChange={handleColumnChange}
@@ -186,26 +197,6 @@ function PartCard({
   const revalidator = useRevalidator();
   const jsonString = JSON.stringify(part, null, 2);
 
-  // Find matching card and its column to get the column color
-  const matchingCard = part.partNumber 
-    ? cards.find(card => card.title === part.partNumber)
-    : null;
-  
-  const currentColumn = matchingCard 
-    ? columns.find(col => {
-        const columnIdNum = Number(col.id);
-        const cardParentId = matchingCard.parent?.id;
-        const cardColumnId = matchingCard.columnId;
-        return (cardParentId !== undefined && Number(cardParentId) === columnIdNum) ||
-               (cardColumnId !== undefined && Number(cardColumnId) === columnIdNum);
-      })
-    : null;
-
-  // Get background color from column, if available
-  const backgroundColor = currentColumn?.color || undefined;
-  const cardStyle = backgroundColor 
-    ? { backgroundColor, borderColor: backgroundColor }
-    : undefined;
 
   // Handle successful part number update
   useEffect(() => {
@@ -225,10 +216,7 @@ function PartCard({
   }, [fetcher.data, fetcher.state, revalidator]);
 
   return (
-    <Card 
-      className="hover:shadow-lg transition-shadow" 
-      style={cardStyle}
-    >
+    <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex items-start justify-between">
           <CardTitle className="text-lg">
@@ -337,11 +325,6 @@ function PartCard({
       )}
       <CardContent className="space-y-4">
         <PartMfgState part={part} cards={cards} columns={columns} />
-        {backgroundColor && (
-          <p className="text-xs text-muted-foreground font-mono">
-            Debug: Column Color = {backgroundColor}
-          </p>
-        )}
       </CardContent>
     </Card>
   );
