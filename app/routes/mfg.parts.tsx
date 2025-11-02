@@ -65,11 +65,20 @@ function PartCard({ part, queryParams }: { part: BtPartMetadataInfo; queryParams
 
   // Handle successful part number update
   useEffect(() => {
+    console.log("[PartCard] Fetcher state changed:", {
+      state: fetcher.state,
+      data: fetcher.data,
+      formData: fetcher.formData,
+    });
+    
     if (fetcher.data?.success) {
+      console.log("[PartCard] Part number update successful, revalidating...");
       setPartNumberInput("");
       revalidator.revalidate();
+    } else if (fetcher.data && !fetcher.data.success) {
+      console.error("[PartCard] Part number update failed:", fetcher.data.error);
     }
-  }, [fetcher.data, revalidator]);
+  }, [fetcher.data, fetcher.state, revalidator]);
 
   return (
     <Card className="hover:shadow-lg transition-shadow">
@@ -112,7 +121,20 @@ function PartCard({ part, queryParams }: { part: BtPartMetadataInfo; queryParams
               <Label htmlFor={`part-number-${part.partId || part.id}`} className="text-xs">
                 Part Number:
               </Label>
-              <fetcher.Form method="post" className="flex gap-2">
+              <fetcher.Form 
+                method="post" 
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  console.log("[PartCard] Form submitted:", {
+                    partId: part.partId || part.id,
+                    partNumber: partNumberInput,
+                    documentId: queryParams.documentId,
+                    instanceType: queryParams.instanceType,
+                    instanceId: queryParams.instanceId,
+                    elementId: queryParams.elementId,
+                  });
+                }}
+              >
                 <input type="hidden" name="partId" value={part.partId || part.id || ""} />
                 <input type="hidden" name="documentId" value={queryParams.documentId} />
                 <input type="hidden" name="instanceType" value={queryParams.instanceType} />
@@ -122,7 +144,10 @@ function PartCard({ part, queryParams }: { part: BtPartMetadataInfo; queryParams
                   id={`part-number-${part.partId || part.id}`}
                   name="partNumber"
                   value={partNumberInput}
-                  onChange={(e) => setPartNumberInput(e.target.value)}
+                  onChange={(e) => {
+                    console.log("[PartCard] Input changed:", e.target.value);
+                    setPartNumberInput(e.target.value);
+                  }}
                   placeholder="Enter part number"
                   className="h-8 text-xs flex-1"
                   disabled={fetcher.state === "submitting"}
@@ -137,7 +162,14 @@ function PartCard({ part, queryParams }: { part: BtPartMetadataInfo; queryParams
                 </Button>
               </fetcher.Form>
               {fetcher.data && !fetcher.data.success && fetcher.data.error && (
-                <p className="text-xs text-destructive">{fetcher.data.error}</p>
+                <p className="text-xs text-destructive">
+                  Error: {fetcher.data.error}
+                </p>
+              )}
+              {fetcher.data?.success && (
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  Part number updated successfully!
+                </p>
               )}
             </div>
           ) : (
@@ -171,9 +203,12 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  console.log("[ACTION] Starting part number update");
+  
   // Check Onshape authentication (required)
   const onshapeAuthenticated = await isOnshapeAuthenticated(request);
   if (!onshapeAuthenticated) {
+    console.error("[ACTION] Not authenticated with Onshape");
     return { success: false, error: "Not authenticated with Onshape" };
   }
 
@@ -186,13 +221,31 @@ export async function action({ request }: Route.ActionArgs) {
     const instanceId = formData.get("instanceId")?.toString();
     const elementId = formData.get("elementId")?.toString();
 
+    console.log("[ACTION] Form data received:", {
+      partId,
+      partNumber,
+      documentId,
+      instanceType,
+      instanceId,
+      elementId,
+    });
+
     if (!partId || !partNumber || !documentId || !instanceId || !elementId) {
-      return { success: false, error: "Missing required fields" };
+      const missing = [];
+      if (!partId) missing.push("partId");
+      if (!partNumber) missing.push("partNumber");
+      if (!documentId) missing.push("documentId");
+      if (!instanceId) missing.push("instanceId");
+      if (!elementId) missing.push("elementId");
+      console.error("[ACTION] Missing required fields:", missing);
+      return { success: false, error: `Missing required fields: ${missing.join(", ")}` };
     }
 
     const client = await createOnshapeApiClient(request);
+    console.log("[ACTION] Client created successfully");
 
     // First, get the metadata to find the propertyId for "Part number"
+    console.log("[ACTION] Fetching metadata for part:", { documentId, instanceType, instanceId, elementId, partId });
     const metadataResponse = await getWmvepMetadata({
       client,
       path: {
@@ -208,18 +261,53 @@ export async function action({ request }: Route.ActionArgs) {
       },
     });
 
+    console.log("[ACTION] Metadata response received:", {
+      hasData: !!metadataResponse.data,
+      jsonType: metadataResponse.data?.jsonType,
+      propertiesCount: metadataResponse.data?.properties?.length || 0,
+    });
+
     const metadata = metadataResponse.data;
     if (!metadata || !metadata.properties) {
-      return { success: false, error: "Failed to retrieve part metadata" };
+      console.error("[ACTION] Failed to retrieve part metadata or properties missing");
+      console.error("[ACTION] Metadata object:", JSON.stringify(metadata, null, 2));
+      return { success: false, error: "Failed to retrieve part metadata or no properties found" };
     }
 
-    // Find the "Part number" property
+    // Log all available properties for debugging
+    console.log("[ACTION] Available properties:", metadata.properties.map((prop: any) => ({
+      name: prop.name,
+      propertyId: prop.propertyId,
+      value: prop.value,
+      editable: prop.editable,
+    })));
+
+    // Find the "Part number" property (try multiple possible names)
     const partNumberProperty = metadata.properties.find(
-      (prop) => prop.name === "Part number" || prop.name === "Part Number"
+      (prop: any) => {
+        const name = prop.name?.toLowerCase();
+        return name === "part number" || 
+               name === "partnumber" || 
+               name === "part_number" ||
+               prop.propertyId?.includes("partnumber") ||
+               prop.propertyId?.includes("part_number");
+      }
     );
 
+    console.log("[ACTION] Part number property search result:", {
+      found: !!partNumberProperty,
+      propertyName: partNumberProperty?.name,
+      propertyId: partNumberProperty?.propertyId,
+      editable: partNumberProperty?.editable,
+    });
+
     if (!partNumberProperty || !partNumberProperty.propertyId) {
-      return { success: false, error: "Part number property not found in metadata" };
+      console.error("[ACTION] Part number property not found in metadata");
+      const availableNames = metadata.properties.map((p: any) => p.name).filter(Boolean);
+      return { 
+        success: false, 
+        error: `Part number property not found. Available properties: ${availableNames.join(", ") || "none"}` 
+      };
     }
 
     // Update the part number using the metadata API
@@ -234,7 +322,9 @@ export async function action({ request }: Route.ActionArgs) {
       ],
     });
 
-    await updateWvepMetadata({
+    console.log("[ACTION] Sending update request with body:", updateBody);
+
+    const updateResponse = await updateWvepMetadata({
       client,
       path: {
         did: documentId,
@@ -247,18 +337,43 @@ export async function action({ request }: Route.ActionArgs) {
       body: updateBody,
     });
 
+    console.log("[ACTION] Update response received:", {
+      hasData: !!updateResponse.data,
+      response: JSON.stringify(updateResponse.data, null, 2),
+    });
+
     return { success: true };
   } catch (error: unknown) {
-    console.error("Error updating part number:", error);
+    console.error("[ACTION] Error updating part number:", error);
     
     let errorMessage = "Failed to update part number";
+    let errorDetails: any = {};
+    
     if (error && typeof error === "object") {
       if ("message" in error) {
         errorMessage = String(error.message);
       }
+      if ("status" in error) {
+        errorDetails.status = error.status;
+      }
+      if ("response" in error && error.response) {
+        errorDetails.response = error.response;
+        try {
+          if (typeof error.response === "object" && "data" in error.response) {
+            errorDetails.responseData = error.response.data;
+          }
+        } catch (e) {
+          // Ignore parsing errors
+        }
+      }
     }
 
-    return { success: false, error: errorMessage };
+    console.error("[ACTION] Error details:", errorDetails);
+
+    return { 
+      success: false, 
+      error: `${errorMessage}${errorDetails.status ? ` (Status: ${errorDetails.status})` : ""}` 
+    };
   }
 }
 
