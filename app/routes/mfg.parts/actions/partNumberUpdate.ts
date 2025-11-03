@@ -123,6 +123,8 @@ export async function handlePartNumberUpdate(
     }
 
     // Update the part number using the metadata API
+    // Note: Even though the type says 'string', the generated client uses jsonBodySerializer
+    // which will JSON.stringify it, so we pass an object to avoid double-encoding
     const updateBodyObj = {
       jsonType: "metadata-part",
       partId: partId,
@@ -146,26 +148,58 @@ export async function handlePartNumberUpdate(
                      updateBodyObj.properties[0].propertyId === partNumberProperty.propertyId,
     });
 
-    const updateBody = JSON.stringify(updateBodyObj);
-    console.log("[ACTION] Sending update request with body:", updateBody);
+    console.log("[ACTION] Sending update request with body object:", JSON.stringify(updateBodyObj, null, 2));
+    
+    // Pass as object - the generated client will JSON.stringify it via jsonBodySerializer
+    // The type says 'string' but that appears to be incorrect - passing an object should work
+    const updateBody = updateBodyObj as any;
 
-    const updateResponse = await updateWvepMetadata({
-      client,
-      path: {
-        did: documentId,
-        wvm: instanceType as 'w' | 'v' | 'm',
-        wvmid: instanceId,
-        eid: elementId,
-        iden: 'p',
-        pid: partId,
-      },
-      body: updateBody,
-    });
+    let updateResponse;
+    try {
+      updateResponse = await updateWvepMetadata({
+        client,
+        path: {
+          did: documentId,
+          wvm: instanceType as 'w' | 'v' | 'm',
+          wvmid: instanceId,
+          eid: elementId,
+          iden: 'p',
+          pid: partId,
+        },
+        body: updateBody, // Passing object - client will serialize it
+      });
+    } catch (updateError: any) {
+      console.error("[ACTION] Update API threw an error:", updateError);
+      console.error("[ACTION] Update error details:", {
+        message: updateError?.message,
+        status: updateError?.status,
+        response: updateError?.response ? {
+          status: updateError.response.status,
+          statusText: updateError.response.statusText,
+          data: updateError.response.data,
+        } : undefined,
+      });
+      throw updateError;
+    }
 
+    // Log full response including status and headers if available
     console.log("[ACTION] Update response received:", {
       hasData: !!updateResponse.data,
       response: JSON.stringify(updateResponse.data, null, 2),
+      responseKeys: updateResponse.data ? Object.keys(updateResponse.data) : [],
+      fullResponse: updateResponse,
     });
+
+    // Check for HTTP status in response if available
+    if (updateResponse && typeof updateResponse === 'object') {
+      const resp = updateResponse as any;
+      console.log("[ACTION] Update response status check:", {
+        status: resp.status,
+        statusText: resp.statusText,
+        ok: resp.ok,
+        headers: resp.headers ? Object.keys(resp.headers) : undefined,
+      });
+    }
 
     // Log microversion info if available in response
     if (updateResponse.data && typeof updateResponse.data === 'object') {
