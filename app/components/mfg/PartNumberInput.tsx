@@ -1,5 +1,5 @@
 import { useFetcher, useRevalidator } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -18,14 +18,30 @@ export function PartNumberInput({ part, queryParams }: PartNumberInputProps) {
   const [partNumberInput, setPartNumberInput] = useState("");
   const fetcher = useFetcher();
   const revalidator = useRevalidator();
+  const lastSuccessRef = useRef<string | null>(null);
 
-  // Handle successful part number update
+  // Handle successful part number update - only revalidate once per unique success
   useEffect(() => {
+    // Only revalidate when we get a new success response (check by data identity)
     if (fetcher.data?.success) {
-      setPartNumberInput("");
-      revalidator.revalidate();
+      const successKey = JSON.stringify(fetcher.data);
+      
+      // Only revalidate if this is a new success we haven't handled yet
+      if (lastSuccessRef.current !== successKey) {
+        setPartNumberInput("");
+        lastSuccessRef.current = successKey;
+        
+        // Use requestIdleCallback or setTimeout to avoid revalidation loops
+        // Revalidate after a short delay to ensure update has propagated
+        setTimeout(() => {
+          revalidator.revalidate();
+        }, 100);
+      }
+    } else if (fetcher.state === "idle" && !fetcher.data) {
+      // Reset when fetcher fully resets
+      lastSuccessRef.current = null;
     }
-  }, [fetcher.data, revalidator]);
+  }, [fetcher.data, fetcher.state, revalidator]);
 
   // If part number is already set, just display it
   if (part.partNumber) {
