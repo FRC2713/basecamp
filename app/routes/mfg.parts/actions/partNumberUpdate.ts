@@ -88,6 +88,12 @@ export async function handlePartNumberUpdate(
       editable: prop.editable,
     })));
 
+    // Log initial metadata microversion
+    console.log("[ACTION] Initial metadata microversion:", {
+      metadataMicroversion: metadata.metadataMicroversion,
+      microversionId: metadata.microversionId,
+    });
+
     // Find the "Part number" property (try multiple possible names)
     const partNumberProperty = metadata.properties.find(
       (prop: any) => {
@@ -117,7 +123,7 @@ export async function handlePartNumberUpdate(
     }
 
     // Update the part number using the metadata API
-    const updateBody = JSON.stringify({
+    const updateBodyObj = {
       jsonType: "metadata-part",
       partId: partId,
       properties: [
@@ -126,8 +132,21 @@ export async function handlePartNumberUpdate(
           propertyId: partNumberProperty.propertyId,
         },
       ],
+    };
+    
+    // Verify request format matches Onshape API documentation
+    console.log("[ACTION] Update request body (verifying format):", {
+      jsonType: updateBodyObj.jsonType,
+      partId: updateBodyObj.partId,
+      propertiesCount: updateBodyObj.properties.length,
+      propertyValue: updateBodyObj.properties[0].value,
+      propertyId: updateBodyObj.properties[0].propertyId,
+      formatMatches: updateBodyObj.jsonType === "metadata-part" && 
+                     updateBodyObj.properties.length === 1 &&
+                     updateBodyObj.properties[0].propertyId === partNumberProperty.propertyId,
     });
 
+    const updateBody = JSON.stringify(updateBodyObj);
     console.log("[ACTION] Sending update request with body:", updateBody);
 
     const updateResponse = await updateWvepMetadata({
@@ -147,6 +166,72 @@ export async function handlePartNumberUpdate(
       hasData: !!updateResponse.data,
       response: JSON.stringify(updateResponse.data, null, 2),
     });
+
+    // Log microversion info if available in response
+    if (updateResponse.data && typeof updateResponse.data === 'object') {
+      const responseData = updateResponse.data as any;
+      console.log("[ACTION] Update response microversion info:", {
+        metadataMicroversion: responseData.metadataMicroversion,
+        microversionId: responseData.microversionId,
+        keys: Object.keys(responseData),
+      });
+    }
+
+    // Verify the update by fetching metadata again (as per Onshape docs step 4)
+    console.log("[ACTION] Verifying update by fetching metadata again...");
+    try {
+      const verificationMetadataResponse = await getWmvepMetadata({
+        client,
+        path: {
+          did: documentId,
+          wvm: instanceType as 'w' | 'v' | 'm',
+          wvmid: instanceId,
+          eid: elementId,
+          iden: 'p',
+          pid: partId,
+        },
+        query: {
+          includeComputedProperties: true,
+        },
+      });
+
+      const verificationMetadata = verificationMetadataResponse.data;
+      if (verificationMetadata && verificationMetadata.properties) {
+        const updatedPartNumberProperty = verificationMetadata.properties.find(
+          (prop: any) => prop.propertyId === partNumberProperty.propertyId
+        );
+
+        console.log("[ACTION] Verification - Updated part number property:", {
+          found: !!updatedPartNumberProperty,
+          propertyId: updatedPartNumberProperty?.propertyId,
+          name: updatedPartNumberProperty?.name,
+          value: updatedPartNumberProperty?.value,
+          expectedValue: partNumber.trim(),
+          matches: updatedPartNumberProperty?.value === partNumber.trim(),
+        });
+
+        // Log metadata microversion comparison
+        console.log("[ACTION] Metadata microversion comparison:", {
+          beforeUpdate: metadata.metadataMicroversion,
+          afterUpdate: verificationMetadata.metadataMicroversion,
+          changed: metadata.metadataMicroversion !== verificationMetadata.metadataMicroversion,
+        });
+
+        if (updatedPartNumberProperty?.value !== partNumber.trim()) {
+          console.warn("[ACTION] WARNING: Part number update verification failed - metadata API shows different value:", {
+            expected: partNumber.trim(),
+            actual: updatedPartNumberProperty?.value,
+          });
+        } else {
+          console.log("[ACTION] SUCCESS: Part number update verified via metadata API");
+        }
+      } else {
+        console.warn("[ACTION] Could not verify update - verification metadata response missing properties");
+      }
+    } catch (verifyError) {
+      console.error("[ACTION] Error verifying update via metadata API:", verifyError);
+      // Don't fail the update if verification fails - it might just be a timing issue
+    }
 
     return { success: true };
   } catch (error: unknown) {

@@ -36,6 +36,7 @@ export async function loadOnshapeData(
         },
       }),
       // Fetch parts data (required - failure should propagate)
+      // Note: includePropertyDefaults might help get fresh metadata, but parts API may still be cached
       getPartsWmve({
         client,
         path: {
@@ -46,6 +47,7 @@ export async function loadOnshapeData(
         },
         query: {
           withThumbnails: true,
+          includePropertyDefaults: true, // Include metadata schema property defaults
         },
       }),
     ]);
@@ -76,6 +78,18 @@ export async function loadOnshapeData(
 
     // Extract parts from response (response.data is an array of BtPartMetadataInfo)
     const parts = partsResult.value.data || [];
+
+    // Log part number information for debugging
+    console.log("[LOADER] Parts fetched from getPartsWmve:", {
+      totalParts: parts.length,
+      partsWithPartNumber: parts.filter((p: any) => p.partNumber).length,
+      partNumbers: parts.map((p: any) => ({
+        partId: p.partId || p.id,
+        partNumber: p.partNumber,
+        metadataMicroversion: p.metadataMicroversion,
+        name: p.name,
+      })),
+    });
 
     return {
       parts,
