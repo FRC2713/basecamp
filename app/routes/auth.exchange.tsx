@@ -3,6 +3,9 @@ import { exchangeCodeForToken } from "~/lib/basecampApi/auth";
 import { getSession, commitSession } from "~/lib/session";
 
 export async function action({ request }: Route.ActionArgs) {
+  console.log("[EXCHANGE] Token exchange request received");
+  console.log("[EXCHANGE] Cookie header:", request.headers.get("Cookie") ? "present" : "missing");
+  
   if (request.method !== "POST") {
     return Response.json(
       { success: false, error: "Method not allowed" },
@@ -14,7 +17,11 @@ export async function action({ request }: Route.ActionArgs) {
   const body = await request.json();
   const { code, state } = body;
 
+  console.log("[EXCHANGE] Received code:", code ? `${code.substring(0, 10)}...` : "null");
+  console.log("[EXCHANGE] Received state:", state);
+
   if (!code) {
+    console.log("[EXCHANGE] ERROR: No code provided");
     return Response.json(
       { success: false, error: "No authorization code provided" },
       { status: 400 }
@@ -22,6 +29,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (!state) {
+    console.log("[EXCHANGE] ERROR: No state provided");
     return Response.json(
       { success: false, error: "No state parameter provided" },
       { status: 400 }
@@ -30,12 +38,20 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Validate state against session to prevent CSRF attacks
   const storedState = session.get("oauthState");
+  console.log("[EXCHANGE] Stored state from session:", storedState);
+  console.log("[EXCHANGE] States match:", state === storedState);
+  
   if (!storedState || state !== storedState) {
+    console.log("[EXCHANGE] ERROR: State validation failed");
+    console.log("[EXCHANGE] Expected:", storedState);
+    console.log("[EXCHANGE] Received:", state);
     return Response.json(
       { success: false, error: "Invalid state parameter" },
       { status: 400 }
     );
   }
+  
+  console.log("[EXCHANGE] State validation passed");
 
   const clientId = process.env.BASECAMP_CLIENT_ID;
   const clientSecret = process.env.BASECAMP_CLIENT_SECRET;
@@ -49,6 +65,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   try {
+    console.log("[EXCHANGE] Exchanging code for token...");
     // Exchange authorization code for access token
     const tokenResponse = await exchangeCodeForToken(
       code,
@@ -57,6 +74,7 @@ export async function action({ request }: Route.ActionArgs) {
       clientSecret
     );
 
+    console.log("[EXCHANGE] Token exchange successful");
     // Store tokens in session
     session.set("accessToken", tokenResponse.access_token);
     session.set("refreshToken", tokenResponse.refresh_token);
@@ -69,6 +87,7 @@ export async function action({ request }: Route.ActionArgs) {
 
     // Commit session to save cookies
     const cookie = await commitSession(session);
+    console.log("[EXCHANGE] Session updated, sending response");
 
     return Response.json(
       { success: true, redirectTo },
@@ -80,7 +99,7 @@ export async function action({ request }: Route.ActionArgs) {
       }
     );
   } catch (error) {
-    console.error("Token exchange error:", error);
+    console.error("[EXCHANGE] Token exchange error:", error);
     return Response.json(
       {
         success: false,

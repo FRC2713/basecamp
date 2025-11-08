@@ -10,6 +10,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
+  console.log("[CALLBACK] Received OAuth callback");
+  console.log("[CALLBACK] Code:", code ? `${code.substring(0, 10)}...` : "null");
+  console.log("[CALLBACK] State from URL:", state);
+  console.log("[CALLBACK] Error:", error);
+  console.log("[CALLBACK] Cookie header:", request.headers.get("Cookie") ? "present" : "missing");
+
   // If there's an error, return it to be handled by client
   if (error) {
     return {
@@ -24,16 +30,20 @@ export async function loader({ request }: Route.LoaderArgs) {
   // by checking the Sec-Fetch-Dest header or if we can do server-side exchange
   const session = await getSession(request);
   const storedState = session.get("oauthState");
+  console.log("[CALLBACK] Stored state from session:", storedState);
+  console.log("[CALLBACK] States match:", state === storedState);
 
   // If we have code, state matches, and state is in session, do server-side exchange
   // This handles the case where OAuth opens in a new tab instead of popup
   if (code && state && storedState && state === storedState) {
+    console.log("[CALLBACK] State validation passed, attempting server-side exchange");
     const clientId = process.env.BASECAMP_CLIENT_ID;
     const clientSecret = process.env.BASECAMP_CLIENT_SECRET;
     const redirectUri = process.env.BASECAMP_REDIRECT_URI;
 
     if (clientId && clientSecret && redirectUri) {
       try {
+        console.log("[CALLBACK] Exchanging code for token...");
         // Exchange authorization code for access token on server
         const tokenResponse = await exchangeCodeForToken(
           code,
@@ -42,6 +52,7 @@ export async function loader({ request }: Route.LoaderArgs) {
           clientSecret
         );
 
+        console.log("[CALLBACK] Token exchange successful");
         // Store tokens in session
         session.set("accessToken", tokenResponse.access_token);
         session.set("refreshToken", tokenResponse.refresh_token);
@@ -52,6 +63,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         session.unset("oauthState");
         session.unset("oauthRedirect");
 
+        console.log("[CALLBACK] Redirecting to:", redirectTo);
         // Redirect back to destination with session cookie
         return redirect(redirectTo, {
           headers: {
@@ -59,10 +71,18 @@ export async function loader({ request }: Route.LoaderArgs) {
           },
         });
       } catch (exchangeError) {
-        console.error("Server-side token exchange error:", exchangeError);
+        console.error("[CALLBACK] Server-side token exchange error:", exchangeError);
         // Fall through to return data for client-side handling
       }
+    } else {
+      console.log("[CALLBACK] Missing env vars for server-side exchange");
     }
+  } else {
+    console.log("[CALLBACK] Cannot do server-side exchange:");
+    console.log("  - Has code:", !!code);
+    console.log("  - Has state:", !!state);
+    console.log("  - Has storedState:", !!storedState);
+    console.log("  - States match:", state === storedState);
   }
 
   // If server-side exchange didn't happen, return data for client-side popup handling

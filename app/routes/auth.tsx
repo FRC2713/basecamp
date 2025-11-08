@@ -26,6 +26,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (session.get("oauthState")) {
     // Still return popup mode, but don't regenerate state
     const existingState = session.get("oauthState");
+    console.log("[AUTH] Using existing state from session:", existingState);
     const storedRedirect = session.get("oauthRedirect") || redirectTo;
     
     const clientId = process.env.BASECAMP_CLIENT_ID;
@@ -37,6 +38,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     
     const authUrl = getAuthorizationUrl(redirectUri, clientId, existingState);
     const cookie = await commitSession(session);
+    console.log("[AUTH] Re-committing session with existing state");
 
     // https://frc2713-basecamp.vercel.app/mfg/parts?elementType=PARTSTUDIO&documentId=93371085fe0df01c1bd01af8&instanceType=w&instanceId=13b14b60f19e361506cd325f&elementId=387767658bafc77ebb614078
     
@@ -59,6 +61,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Generate state for CSRF protection
   const state = randomBytes(32).toString("hex");
+  console.log("[AUTH] Generated new state:", state);
+  
   session.set("oauthState", state);
   if (redirectTo !== "/") {
     session.set("oauthRedirect", redirectTo);
@@ -69,6 +73,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   
   // Commit session to ensure cookie is set
   const cookie = await commitSession(session);
+  console.log("[AUTH] Set session cookie with state. Cookie header length:", cookie.length);
   
   // Return auth URL for client-side popup handling
   return {
