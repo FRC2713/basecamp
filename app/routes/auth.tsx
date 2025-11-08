@@ -10,6 +10,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const redirectTo = url.searchParams.get("redirect") || "/";
   
+  console.log("[AUTH LOADER] URL:", url.pathname + url.search);
+  console.log("[AUTH LOADER] State param:", url.searchParams.get("state"));
+  
   // Check if already authenticated
   if (session.get("accessToken")) {
     // Commit session to ensure cookie is set
@@ -34,6 +37,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (stateParam) {
     // We have a state from init, use it to build auth URL
     console.log("[AUTH] Using state from URL param:", stateParam);
+    
+    // Verify the state matches what's in the session
+    const storedState = session.get("oauthState");
+    console.log("[AUTH] Stored state in session:", storedState);
+    console.log("[AUTH] States match:", stateParam === storedState);
+    
     const authUrl = getAuthorizationUrl(redirectUri, clientId, stateParam);
     
     return {
