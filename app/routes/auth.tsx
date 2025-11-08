@@ -20,37 +20,6 @@ export async function loader({ request }: Route.LoaderArgs) {
       },
     });
   }
-  
-  // If we're already in an OAuth flow (have oauthState), don't start a new one
-  // This prevents redirect loops
-  if (session.get("oauthState")) {
-    // Still return popup mode, but don't regenerate state
-    const existingState = session.get("oauthState");
-    console.log("[AUTH] Using existing state from session:", existingState);
-    const storedRedirect = session.get("oauthRedirect") || redirectTo;
-    
-    const clientId = process.env.BASECAMP_CLIENT_ID;
-    const redirectUri = process.env.BASECAMP_REDIRECT_URI;
-    
-    if (!clientId || !redirectUri) {
-      throw new Error("Missing BASECAMP_CLIENT_ID or BASECAMP_REDIRECT_URI environment variables");
-    }
-    
-    const authUrl = getAuthorizationUrl(redirectUri, clientId, existingState);
-    const cookie = await commitSession(session);
-    console.log("[AUTH] Re-committing session with existing state");
-
-    // https://frc2713-basecamp.vercel.app/mfg/parts?elementType=PARTSTUDIO&documentId=93371085fe0df01c1bd01af8&instanceType=w&instanceId=13b14b60f19e361506cd325f&elementId=387767658bafc77ebb614078
-    
-    return {
-      authUrl,
-      usePopup: true,
-      redirectTo: storedRedirect,
-      headers: {
-        "Set-Cookie": cookie,
-      },
-    };
-  }
 
   const clientId = process.env.BASECAMP_CLIENT_ID;
   const redirectUri = process.env.BASECAMP_REDIRECT_URI;
@@ -58,32 +27,65 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!clientId || !redirectUri) {
     throw new Error("Missing BASECAMP_CLIENT_ID or BASECAMP_REDIRECT_URI environment variables");
   }
+  
+  // Check if we have a state parameter in the URL (from our own init endpoint)
+  const stateParam = url.searchParams.get("state");
+  
+  if (stateParam) {
+    // We have a state from init, use it to build auth URL
+    console.log("[AUTH] Using state from URL param:", stateParam);
+    const authUrl = getAuthorizationUrl(redirectUri, clientId, stateParam);
+    
+    return {
+      authUrl,
+      usePopup: true,
+      redirectTo,
+    };
+  }
+  
+  // No state yet - render page that will call init endpoint
+  console.log("[AUTH] No state yet, need to initialize");
+  return {
+    authUrl: null,
+    usePopup: true,
+    redirectTo,
+  };
+}
+
+// New action to initialize OAuth state
+export async function action({ request }: Route.ActionArgs) {
+  if (request.method !== "POST") {
+    return Response.json(
+      { error: "Method not allowed" },
+      { status: 405 }
+    );
+  }
+
+  const session = await getSession(request);
+  const body = await request.json();
+  const { redirectTo } = body;
 
   // Generate state for CSRF protection
   const state = randomBytes(32).toString("hex");
-  console.log("[AUTH] Generated new state:", state);
+  console.log("[AUTH] Generated new state via action:", state);
   
   session.set("oauthState", state);
-  if (redirectTo !== "/") {
+  if (redirectTo && redirectTo !== "/") {
     session.set("oauthRedirect", redirectTo);
   }
 
-  // Generate authorization URL - open popup directly to Basecamp OAuth
-  const authUrl = getAuthorizationUrl(redirectUri, clientId, state);
-  
   // Commit session to ensure cookie is set
   const cookie = await commitSession(session);
-  console.log("[AUTH] Set session cookie with state. Cookie header length:", cookie.length);
+  console.log("[AUTH] Set session cookie with state via action. Cookie header length:", cookie.length);
   
-  // Return auth URL for client-side popup handling
-  return {
-    authUrl,
-    usePopup: true,
-    redirectTo,
-    headers: {
-      "Set-Cookie": cookie,
-    },
-  };
+  return Response.json(
+    { state },
+    {
+      headers: {
+        "Set-Cookie": cookie,
+      },
+    }
+  );
 }
 
 export default function Auth({ loaderData }: Route.ComponentProps) {
@@ -94,6 +96,41 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
   const { authUrl, redirectTo } = loaderData;
 
   useEffect(() => {
+    // If we don't have an authUrl yet, we need to initialize the state first
+    if (!authUrl) {
+      console.log("[AUTH CLIENT] No authUrl, calling init action");
+      const initializeAuth = async () => {
+        try {
+          const response = await fetch("/auth", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+            body: JSON.stringify({ redirectTo }),
+          });
+
+          const data = await response.json();
+          
+          if (data.state) {
+            console.log("[AUTH CLIENT] Got state from server, reloading with state");
+            // Reload the page with the state parameter so loader can build authUrl
+            window.location.href = `/auth?state=${data.state}&redirect=${encodeURIComponent(redirectTo || "/")}`;
+          } else {
+            console.error("[AUTH CLIENT] Failed to initialize auth:", data.error);
+            window.location.href = `/?error=${encodeURIComponent(data.error || "Failed to initialize authentication")}`;
+          }
+        } catch (error) {
+          console.error("[AUTH CLIENT] Error initializing auth:", error);
+          window.location.href = `/?error=${encodeURIComponent("Failed to initialize authentication")}`;
+        }
+      };
+      
+      initializeAuth();
+      return;
+    }
+
+    console.log("[AUTH CLIENT] Have authUrl, opening popup");
     // Configure popup window features with proper centering
     const features = {
       width: 600,
@@ -190,6 +227,7 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
       clearInterval(checkClosed);
       window.removeEventListener("message", messageHandler);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUrl, redirectTo]);
 
   return (
