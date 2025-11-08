@@ -60,7 +60,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Breadcrumbs */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="hidden border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Breadcrumb>
             <BreadcrumbList>
