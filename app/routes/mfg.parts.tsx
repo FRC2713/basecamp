@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Label } from "~/components/ui/label";
-import { Box, Search } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Box, Search, ArrowUpDown } from "lucide-react";
 import { PartCardSkeleton } from "~/components/mfg/PartCardSkeleton";
 import { PartCard } from "~/components/mfg/PartCard";
 import { ErrorDisplay } from "~/components/mfg/ErrorDisplay";
@@ -97,6 +98,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
   const [sortBy, setSortBy] = useState<
     "none" | "name" | "partNumber" | "mfgState" | "createdAt" | "updatedAt"
   >("none");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   // Fetch parts data client-side using TanStack Query
   const {
@@ -158,20 +160,21 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
     }
 
     const partsToSort = [...filteredParts];
+    const directionMultiplier = sortDirection === "asc" ? 1 : -1;
 
     switch (sortBy) {
       case "name":
         return partsToSort.sort((a, b) => {
           const nameA = (a.name || "").toLowerCase();
           const nameB = (b.name || "").toLowerCase();
-          return nameA.localeCompare(nameB);
+          return nameA.localeCompare(nameB) * directionMultiplier;
         });
 
       case "partNumber":
         return partsToSort.sort((a, b) => {
           const numA = (a.partNumber || "").toLowerCase();
           const numB = (b.partNumber || "").toLowerCase();
-          return numA.localeCompare(numB);
+          return numA.localeCompare(numB) * directionMultiplier;
         });
 
       case "mfgState": {
@@ -215,7 +218,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
           const positionA = columnA?.position ?? Number.MAX_SAFE_INTEGER;
           const positionB = columnB?.position ?? Number.MAX_SAFE_INTEGER;
 
-          return positionA - positionB;
+          return (positionA - positionB) * directionMultiplier;
         });
       }
 
@@ -236,7 +239,8 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
           const dateA = new Date(cardA.created_at).getTime();
           const dateB = new Date(cardB.created_at).getTime();
 
-          return dateB - dateA; // Newest first
+          // Base sort: newest first (dateB - dateA), then apply direction
+          return (dateB - dateA) * directionMultiplier;
         });
       }
 
@@ -257,14 +261,15 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
           const dateA = new Date(cardA.updated_at).getTime();
           const dateB = new Date(cardB.updated_at).getTime();
 
-          return dateB - dateA; // Most recently updated first
+          // Base sort: most recently updated first (dateB - dateA), then apply direction
+          return (dateB - dateA) * directionMultiplier;
         });
       }
 
       default:
         return partsToSort;
     }
-  }, [filteredParts, sortBy, basecampCards, basecampColumns]);
+  }, [filteredParts, sortBy, sortDirection, basecampCards, basecampColumns]);
 
   const error = validationError || (partsError ? String(partsError) : null);
 
@@ -318,26 +323,45 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
                 className="pl-10"
               />
             </div>
-            <div className="w-full space-y-2 sm:w-[200px]">
-              <Label htmlFor="sort-select" className="text-sm">
-                Sort by
-              </Label>
-              <Select
-                value={sortBy}
-                onValueChange={(value: any) => setSortBy(value)}
-              >
-                <SelectTrigger id="sort-select">
-                  <SelectValue placeholder="No sorting" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No sorting</SelectItem>
-                  <SelectItem value="name">Name</SelectItem>
-                  <SelectItem value="partNumber">Part Number</SelectItem>
-                  <SelectItem value="mfgState">Manufacturing State</SelectItem>
-                  <SelectItem value="createdAt">Date Created</SelectItem>
-                  <SelectItem value="updatedAt">Last Updated</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-end gap-2">
+              <div className="w-full space-y-2 sm:w-[200px]">
+                <Label htmlFor="sort-select" className="text-sm">
+                  Sort by
+                </Label>
+                <Select
+                  value={sortBy}
+                  onValueChange={(value: any) => setSortBy(value)}
+                >
+                  <SelectTrigger id="sort-select">
+                    <SelectValue placeholder="No sorting" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No sorting</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="partNumber">Part Number</SelectItem>
+                    <SelectItem value="mfgState">
+                      Manufacturing State
+                    </SelectItem>
+                    <SelectItem value="createdAt">Date Created</SelectItem>
+                    <SelectItem value="updatedAt">Last Updated</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {sortBy !== "none" && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() =>
+                    setSortDirection((prev) =>
+                      prev === "asc" ? "desc" : "asc"
+                    )
+                  }
+                  title={`Sort ${sortDirection === "asc" ? "ascending" : "descending"}`}
+                  className="h-10 w-10"
+                >
+                  <ArrowUpDown className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         )}

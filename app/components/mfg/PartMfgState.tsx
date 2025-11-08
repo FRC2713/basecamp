@@ -12,7 +12,6 @@ import {
 import type { BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 import type { CardTableColumn } from "~/lib/basecampApi/cardTables";
 import type { CardWithColumn } from "~/routes/mfg.parts/utils/types";
-import { ManufacturingStateBadge } from "./ManufacturingStateBadge";
 import { PartDueDate } from "./PartDueDate";
 
 import type { PartsQueryParams } from "~/routes/mfg.parts/utils/types";
@@ -132,9 +131,6 @@ export function PartMfgState({ part, queryParams, cards, columns }: PartMfgState
   return (
     <div className="space-y-2">
       <Label className="text-xs">Manufacturing State:</Label>
-      {currentColumn && (
-        <ManufacturingStateBadge column={currentColumn} />
-      )}
       <Select
         value={currentColumn?.id.toString() || ""}
         onValueChange={handleColumnChange}

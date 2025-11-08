@@ -10,7 +10,7 @@ export function ManufacturingStateBadge({ column }: { column: CardTableColumn })
   
   return (
     <Badge
-      className={`mb-2 ${bg} ${text} border-transparent`}
+      className={`${bg} ${text} border-transparent`}
     >
       {column.title}
     </Badge>
