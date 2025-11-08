@@ -2,15 +2,15 @@ import type { Route } from "./+types/home";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
-import { Sparkles, Rocket, BookOpen, Code2, LogIn, LogOut, CheckCircle2 } from "lucide-react";
+import { Sparkles, LogIn, CheckCircle2, Box, CheckSquare2, FolderKanban, ArrowRight } from "lucide-react";
 import { Link, useSearchParams, redirect } from "react-router";
 import { isOnshapeAuthenticated, isBasecampAuthenticated, getSession, commitSession } from "~/lib/session";
 import { refreshOnshapeTokenIfNeededWithSession, refreshBasecampTokenIfNeededWithSession } from "~/lib/tokenRefresh";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Basecamp Integration" },
-    { name: "description", content: "Welcome to Basecamp Integration!" },
+    { title: "Onshape & Basecamp Integration" },
+    { name: "description", content: "Bridge Onshape CAD data with Basecamp project management. View parts, manage manufacturing tasks, and streamline your workflow." },
   ];
 }
 
@@ -105,15 +105,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className="text-center space-y-4">
           <div className="flex items-center justify-center gap-2">
             <Sparkles className="h-8 w-8 text-primary" />
-            <h1 className="text-4xl font-bold tracking-tight">Welcome to Basecamp</h1>
+            <h1 className="text-4xl font-bold tracking-tight">Onshape & Basecamp Integration</h1>
           </div>
           <p className="text-xl text-muted-foreground">
-            Your integration with Basecamp 4 API
+            Bridge your CAD data with project management. View Onshape parts, manage manufacturing tasks, and streamline your workflow.
           </p>
           <div className="flex items-center justify-center gap-2 flex-wrap">
-            <Badge variant="secondary">React Router v7</Badge>
-            <Badge variant="secondary">shadcn/ui</Badge>
-            <Badge variant="secondary">Tailwind CSS</Badge>
             {onshapeAuthenticated && (
               <Badge variant="default" className="gap-1">
                 <CheckCircle2 className="h-3 w-3" />
@@ -209,45 +206,54 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader>
-              <Rocket className="h-6 w-6 text-primary mb-2" />
-              <CardTitle>Get Started</CardTitle>
+              <Box className="h-6 w-6 text-primary mb-2" />
+              <CardTitle>MFG Parts</CardTitle>
               <CardDescription>
-                Begin integrating with the Basecamp API
+                View and manage Onshape parts from Part Studios. Update part numbers, create Basecamp cards with thumbnails, and track manufacturing states.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="default">
-                Start Building
+              <Button asChild className="w-full" variant="default">
+                <Link to="/mfg/parts">
+                  View Parts
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Link>
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <BookOpen className="h-6 w-6 text-primary mb-2" />
-              <CardTitle>Documentation</CardTitle>
+              <CheckSquare2 className="h-6 w-6 text-primary mb-2" />
+              <CardTitle>MFG Tasks</CardTitle>
               <CardDescription>
-                Explore the Basecamp 4 API documentation
+                View and manage manufacturing tasks in Basecamp card tables. Create new tasks, organize by columns, and track progress.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="outline">
-                View Docs
+              <Button asChild className="w-full" variant="default">
+                <Link to="/mfg/tasks">
+                  View Tasks
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Link>
               </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <Code2 className="h-6 w-6 text-primary mb-2" />
-              <CardTitle>API Integration</CardTitle>
+              <FolderKanban className="h-6 w-6 text-primary mb-2" />
+              <CardTitle>Projects</CardTitle>
               <CardDescription>
-                Connect to Basecamp projects and data
+                Browse all your Basecamp projects. View project details, status, and access project management tools.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="secondary">
-                Explore API
+              <Button asChild className="w-full" variant="default">
+                <Link to="/projects">
+                  View Projects
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -256,9 +262,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {/* Quick Links */}
         <Card>
           <CardHeader>
-            <CardTitle>Quick Links</CardTitle>
+            <CardTitle>Resources</CardTitle>
             <CardDescription>
-              Resources to help you get started
+              Documentation and API references
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -272,20 +278,12 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 Basecamp API Docs
               </a>
               <a 
-                href="https://reactrouter.com/docs" 
+                href="https://cad.onshape.com/help" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-8 px-3 text-xs"
               >
-                React Router Docs
-              </a>
-              <a 
-                href="https://ui.shadcn.com" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground h-8 px-3 text-xs"
-              >
-                shadcn/ui Docs
+                Onshape Help
               </a>
             </div>
           </CardContent>

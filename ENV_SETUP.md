@@ -16,3 +16,4 @@ SESSION_SECRET=your-random-secret-key-change-in-production
 - Make sure `BASECAMP_REDIRECT_URI` matches the redirect URI configured in your Basecamp app settings
 
 
+
