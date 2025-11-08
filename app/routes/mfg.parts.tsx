@@ -11,6 +11,14 @@ import {
 import { Card, CardContent } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Input } from "~/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { Label } from "~/components/ui/label";
 import { Box, Search } from "lucide-react";
 import { PartCardSkeleton } from "~/components/mfg/PartCardSkeleton";
 import { PartCard } from "~/components/mfg/PartCard";
@@ -19,6 +27,7 @@ import { action } from "./mfg.parts/actions";
 import { validateQueryParams } from "./mfg.parts/loaders/queryValidation";
 import { loadBasecampData } from "./mfg.parts/loaders/basecampLoader";
 import type { BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
+import type { CardWithColumn } from "./mfg.parts/utils/types";
 
 export { action };
 
@@ -85,6 +94,9 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
   } = loaderData;
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<
+    "none" | "name" | "partNumber" | "mfgState" | "createdAt" | "updatedAt"
+  >("none");
 
   // Fetch parts data client-side using TanStack Query
   const {
@@ -139,6 +151,121 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
     return fuse.search(searchQuery).map((result) => result.item);
   }, [parts, fuse, searchQuery]);
 
+  // Sort filtered parts
+  const sortedParts = useMemo(() => {
+    if (sortBy === "none") {
+      return filteredParts;
+    }
+
+    const partsToSort = [...filteredParts];
+
+    switch (sortBy) {
+      case "name":
+        return partsToSort.sort((a, b) => {
+          const nameA = (a.name || "").toLowerCase();
+          const nameB = (b.name || "").toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+      case "partNumber":
+        return partsToSort.sort((a, b) => {
+          const numA = (a.partNumber || "").toLowerCase();
+          const numB = (b.partNumber || "").toLowerCase();
+          return numA.localeCompare(numB);
+        });
+
+      case "mfgState": {
+        // Sort by manufacturing state (column position)
+        return partsToSort.sort((a, b) => {
+          const cardA = basecampCards?.find(
+            (card) => card.title === a.partNumber
+          );
+          const cardB = basecampCards?.find(
+            (card) => card.title === b.partNumber
+          );
+
+          if (!cardA && !cardB) return 0;
+          if (!cardA) return 1; // Parts without cards go to the end
+          if (!cardB) return -1;
+
+          const columnA = basecampColumns?.find((col) => {
+            const columnIdNum = Number(col.id);
+            const cardParentId = cardA.parent?.id;
+            const cardColumnId = cardA.columnId;
+            return (
+              (cardParentId !== undefined &&
+                Number(cardParentId) === columnIdNum) ||
+              (cardColumnId !== undefined &&
+                Number(cardColumnId) === columnIdNum)
+            );
+          });
+
+          const columnB = basecampColumns?.find((col) => {
+            const columnIdNum = Number(col.id);
+            const cardParentId = cardB.parent?.id;
+            const cardColumnId = cardB.columnId;
+            return (
+              (cardParentId !== undefined &&
+                Number(cardParentId) === columnIdNum) ||
+              (cardColumnId !== undefined &&
+                Number(cardColumnId) === columnIdNum)
+            );
+          });
+
+          const positionA = columnA?.position ?? Number.MAX_SAFE_INTEGER;
+          const positionB = columnB?.position ?? Number.MAX_SAFE_INTEGER;
+
+          return positionA - positionB;
+        });
+      }
+
+      case "createdAt": {
+        // Sort by card creation date
+        return partsToSort.sort((a, b) => {
+          const cardA = basecampCards?.find(
+            (card) => card.title === a.partNumber
+          );
+          const cardB = basecampCards?.find(
+            (card) => card.title === b.partNumber
+          );
+
+          if (!cardA && !cardB) return 0;
+          if (!cardA) return 1; // Parts without cards go to the end
+          if (!cardB) return -1;
+
+          const dateA = new Date(cardA.created_at).getTime();
+          const dateB = new Date(cardB.created_at).getTime();
+
+          return dateB - dateA; // Newest first
+        });
+      }
+
+      case "updatedAt": {
+        // Sort by card last updated date
+        return partsToSort.sort((a, b) => {
+          const cardA = basecampCards?.find(
+            (card) => card.title === a.partNumber
+          );
+          const cardB = basecampCards?.find(
+            (card) => card.title === b.partNumber
+          );
+
+          if (!cardA && !cardB) return 0;
+          if (!cardA) return 1; // Parts without cards go to the end
+          if (!cardB) return -1;
+
+          const dateA = new Date(cardA.updated_at).getTime();
+          const dateB = new Date(cardB.updated_at).getTime();
+
+          return dateB - dateA; // Most recently updated first
+        });
+      }
+
+      default:
+        return partsToSort;
+    }
+  }, [filteredParts, sortBy, basecampCards, basecampColumns]);
+
   const error = validationError || (partsError ? String(partsError) : null);
 
   // Show loading screen while data is being fetched
@@ -178,17 +305,40 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
           <ErrorDisplay error={error} exampleUrl={exampleUrl || undefined} />
         )}
 
-        {/* Search Input */}
+        {/* Search and Sort Controls */}
         {parts.length > 0 && !error && (
-          <div className="relative">
-            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              type="text"
-              placeholder="Search parts by name or part number..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="relative flex-1">
+              <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <Input
+                type="text"
+                placeholder="Search parts by name or part number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <div className="w-full space-y-2 sm:w-[200px]">
+              <Label htmlFor="sort-select" className="text-sm">
+                Sort by
+              </Label>
+              <Select
+                value={sortBy}
+                onValueChange={(value: any) => setSortBy(value)}
+              >
+                <SelectTrigger id="sort-select">
+                  <SelectValue placeholder="No sorting" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No sorting</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="partNumber">Part Number</SelectItem>
+                  <SelectItem value="mfgState">Manufacturing State</SelectItem>
+                  <SelectItem value="createdAt">Date Created</SelectItem>
+                  <SelectItem value="updatedAt">Last Updated</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
 
@@ -205,7 +355,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
 
         {parts.length > 0 && queryParams && (
           <div>
-            {filteredParts.length === 0 ? (
+            {sortedParts.length === 0 ? (
               <Card>
                 <CardContent className="pt-6">
                   <p className="text-muted-foreground text-center">
@@ -215,7 +365,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
               </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredParts.map((part) => (
+                {sortedParts.map((part) => (
                   <PartCard
                     key={
                       part.partId ||
