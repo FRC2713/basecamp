@@ -150,6 +150,7 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
             headers: {
               "Content-Type": "application/json",
             },
+            credentials: "include", // Include cookies (session) in the request
             body: JSON.stringify({ code, state }),
           });
 
