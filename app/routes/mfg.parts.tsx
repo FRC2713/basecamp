@@ -78,9 +78,12 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
   const { parts, partStudioName, queryParams, error, exampleUrl, basecampCards, basecampColumns } = loaderData;
   const navigation = useNavigation();
   const isLoading = navigation.state === "loading";
+  
+  // Show loading screen during navigation or initial load when we're expecting data
+  const isLoadingData = isLoading || (queryParams?.documentId && parts.length === 0 && !error);
 
   // Show loading screen while data is being fetched
-  if (isLoading) {
+  if (isLoadingData) {
     return (
       <main className="container mx-auto py-8 px-4">
         <div className="max-w-6xl mx-auto space-y-6">
