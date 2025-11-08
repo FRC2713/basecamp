@@ -123,7 +123,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
               {partStudioName || "MFG Parts"}
             </h1>
             <p className="text-muted-foreground mt-1">
-              {parts.length} {parts.length === 1 ? "part" : "parts"} found
+              {parts.length} {parts.length === 1 ? "part" : "parts"}
             </p>
           </div>
         </div>
@@ -146,7 +146,6 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
 
         {parts.length > 0 && queryParams && (
           <div>
-            <h2 className="text-xl font-semibold mb-4">Parts</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {parts.map((part) => (
                 <PartCard 

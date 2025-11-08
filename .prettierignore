@@ -1,0 +1,27 @@
+# Dependencies
+node_modules
+
+# Build outputs
+build
+dist
+.react-router
+
+# Generated files
+app/lib/onshapeApi/generated
+
+# Cache
+.cache
+.vite
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Misc
+.DS_Store
+coverage
+
