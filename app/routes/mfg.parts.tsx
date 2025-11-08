@@ -1,10 +1,17 @@
 import type { Route } from "./+types/mfg.parts";
 import { redirect } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { getSession, isOnshapeAuthenticated, commitSession } from "~/lib/session";
+import { useState, useMemo } from "react";
+import Fuse from "fuse.js";
+import {
+  getSession,
+  isOnshapeAuthenticated,
+  commitSession,
+} from "~/lib/session";
 import { Card, CardContent } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
-import { Box } from "lucide-react";
+import { Input } from "~/components/ui/input";
+import { Box, Search } from "lucide-react";
 import { PartCardSkeleton } from "~/components/mfg/PartCardSkeleton";
 import { PartCard } from "~/components/mfg/PartCard";
 import { ErrorDisplay } from "~/components/mfg/ErrorDisplay";
@@ -24,7 +31,7 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
-  
+
   // Check Onshape authentication (required)
   const onshapeAuthenticated = await isOnshapeAuthenticated(request);
   if (!onshapeAuthenticated) {
@@ -69,20 +76,33 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function MfgParts({ loaderData }: Route.ComponentProps) {
-  const { queryParams, error: validationError, exampleUrl, basecampCards, basecampColumns } = loaderData;
-  
+  const {
+    queryParams,
+    error: validationError,
+    exampleUrl,
+    basecampCards,
+    basecampColumns,
+  } = loaderData;
+
+  const [searchQuery, setSearchQuery] = useState("");
+
   // Fetch parts data client-side using TanStack Query
   const {
     data: parts = [],
     isLoading: isLoadingParts,
     error: partsError,
   } = useQuery<BtPartMetadataInfo[]>({
-    queryKey: ['parts', queryParams?.documentId, queryParams?.instanceId, queryParams?.elementId],
+    queryKey: [
+      "parts",
+      queryParams?.documentId,
+      queryParams?.instanceId,
+      queryParams?.elementId,
+    ],
     queryFn: async () => {
       if (!queryParams?.documentId) {
         return [];
       }
-      
+
       const params = new URLSearchParams({
         documentId: queryParams.documentId,
         instanceType: queryParams.instanceType,
@@ -90,10 +110,10 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
         elementId: queryParams.elementId!,
         withThumbnails: "true",
       });
-      
+
       const response = await fetch(`/api/onshape/parts?${params}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch parts');
+        throw new Error("Failed to fetch parts");
       }
       return response.json();
     },
@@ -101,13 +121,31 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
     staleTime: 30 * 1000, // Cache for 30 seconds
   });
 
+  // Configure Fuse.js for fuzzy search
+  const fuse = useMemo(() => {
+    return new Fuse(parts, {
+      keys: ["name", "partNumber"],
+      threshold: 0.4, // Lower = more strict, higher = more fuzzy
+      ignoreLocation: true, // Search anywhere in the string
+      minMatchCharLength: 1,
+    });
+  }, [parts]);
+
+  // Filter parts based on search query
+  const filteredParts = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return parts;
+    }
+    return fuse.search(searchQuery).map((result) => result.item);
+  }, [parts, fuse, searchQuery]);
+
   const error = validationError || (partsError ? String(partsError) : null);
 
   // Show loading screen while data is being fetched
   if (isLoadingParts && queryParams?.documentId) {
     return (
-      <main className="container mx-auto py-8 px-4">
-        <div className="max-w-6xl mx-auto space-y-6">
+      <main className="container mx-auto px-4 py-8">
+        <div className="mx-auto max-w-6xl space-y-6">
           {/* Header Skeleton */}
           <div className="flex items-center justify-between">
             <div className="space-y-2">
@@ -133,24 +171,25 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <main className="container mx-auto py-8 px-4">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-              <Box className="h-8 w-8" />
-              MFG Parts
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              {parts.length} {parts.length === 1 ? "part" : "parts"}
-            </p>
-          </div>
-        </div>
-
+    <main className="container mx-auto px-4 py-8">
+      <div className="mx-auto max-w-6xl space-y-6">
         {/* Error Message */}
         {error && (
           <ErrorDisplay error={error} exampleUrl={exampleUrl || undefined} />
+        )}
+
+        {/* Search Input */}
+        {parts.length > 0 && !error && (
+          <div className="relative">
+            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Input
+              type="text"
+              placeholder="Search parts by name or part number..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
         )}
 
         {/* Parts List */}
@@ -166,17 +205,32 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
 
         {parts.length > 0 && queryParams && (
           <div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {parts.map((part) => (
-                <PartCard 
-                  key={part.partId || part.id || part.partIdentity || JSON.stringify(part)} 
-                  part={part} 
-                  queryParams={queryParams}
-                  cards={basecampCards || []}
-                  columns={basecampColumns || []}
-                />
-              ))}
-            </div>
+            {filteredParts.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-muted-foreground text-center">
+                    No parts match your search query.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredParts.map((part) => (
+                  <PartCard
+                    key={
+                      part.partId ||
+                      part.id ||
+                      part.partIdentity ||
+                      JSON.stringify(part)
+                    }
+                    part={part}
+                    queryParams={queryParams}
+                    cards={basecampCards || []}
+                    columns={basecampColumns || []}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
