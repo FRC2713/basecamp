@@ -1,5 +1,6 @@
 import type { Route } from "./+types/mfg.parts";
-import { redirect, useNavigation } from "react-router";
+import { redirect } from "react-router";
+import { useQuery } from "@tanstack/react-query";
 import { getSession, isOnshapeAuthenticated, commitSession } from "~/lib/session";
 import { Card, CardContent } from "~/components/ui/card";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -10,7 +11,7 @@ import { ErrorDisplay } from "~/components/mfg/ErrorDisplay";
 import { action } from "./mfg.parts/actions";
 import { validateQueryParams } from "./mfg.parts/loaders/queryValidation";
 import { loadBasecampData } from "./mfg.parts/loaders/basecampLoader";
-import { loadOnshapeData } from "./mfg.parts/loaders/onshapeLoader";
+import type { BtPartMetadataInfo } from "~/lib/onshapeApi/generated-wrapper";
 
 export { action };
 
@@ -35,8 +36,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!validation.isValid) {
     return {
       error: validation.error,
-      parts: [],
-      partStudioName: null,
       queryParams: validation.queryParams || {
         documentId: null,
         instanceType: "w",
@@ -51,20 +50,15 @@ export async function loader({ request }: Route.LoaderArgs) {
     };
   }
 
-  // Load Basecamp data (optional)
+  // Load Basecamp data (optional) - still done server-side
   const basecampData = await loadBasecampData(request);
-
-  // Load Onshape data (required)
-  const onshapeData = await loadOnshapeData(request, validation.queryParams!);
 
   const cookie = await commitSession(session);
 
   return {
-    parts: onshapeData.parts,
-    partStudioName: onshapeData.partStudioName,
     queryParams: validation.queryParams!,
-    error: onshapeData.error,
-    exampleUrl: onshapeData.exampleUrl,
+    error: null,
+    exampleUrl: null,
     basecampCards: basecampData.cards,
     basecampColumns: basecampData.columns,
     basecampError: basecampData.error,
@@ -75,15 +69,42 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export default function MfgParts({ loaderData }: Route.ComponentProps) {
-  const { parts, partStudioName, queryParams, error, exampleUrl, basecampCards, basecampColumns } = loaderData;
-  const navigation = useNavigation();
-  const isLoading = navigation.state === "loading";
+  const { queryParams, error: validationError, exampleUrl, basecampCards, basecampColumns } = loaderData;
   
-  // Show loading screen during navigation or initial load when we're expecting data
-  const isLoadingData = isLoading || (queryParams?.documentId && parts.length === 0 && !error);
+  // Fetch parts data client-side using TanStack Query
+  const {
+    data: parts = [],
+    isLoading: isLoadingParts,
+    error: partsError,
+  } = useQuery<BtPartMetadataInfo[]>({
+    queryKey: ['parts', queryParams?.documentId, queryParams?.instanceId, queryParams?.elementId],
+    queryFn: async () => {
+      if (!queryParams?.documentId) {
+        return [];
+      }
+      
+      const params = new URLSearchParams({
+        documentId: queryParams.documentId,
+        instanceType: queryParams.instanceType,
+        instanceId: queryParams.instanceId!,
+        elementId: queryParams.elementId!,
+        withThumbnails: "true",
+      });
+      
+      const response = await fetch(`/api/onshape/parts?${params}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch parts');
+      }
+      return response.json();
+    },
+    enabled: !!queryParams?.documentId,
+    staleTime: 30 * 1000, // Cache for 30 seconds
+  });
+
+  const error = validationError || (partsError ? String(partsError) : null);
 
   // Show loading screen while data is being fetched
-  if (isLoadingData) {
+  if (isLoadingParts && queryParams?.documentId) {
     return (
       <main className="container mx-auto py-8 px-4">
         <div className="max-w-6xl mx-auto space-y-6">
@@ -100,7 +121,6 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
 
           {/* Parts Grid Skeleton */}
           <div>
-            <Skeleton className="h-7 w-24 mb-4" />
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, index) => (
                 <PartCardSkeleton key={index} />
@@ -120,7 +140,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
           <div>
             <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
               <Box className="h-8 w-8" />
-              {partStudioName || "MFG Parts"}
+              MFG Parts
             </h1>
             <p className="text-muted-foreground mt-1">
               {parts.length} {parts.length === 1 ? "part" : "parts"}
@@ -130,7 +150,7 @@ export default function MfgParts({ loaderData }: Route.ComponentProps) {
 
         {/* Error Message */}
         {error && (
-          <ErrorDisplay error={error} exampleUrl={exampleUrl} />
+          <ErrorDisplay error={error} exampleUrl={exampleUrl || undefined} />
         )}
 
         {/* Parts List */}

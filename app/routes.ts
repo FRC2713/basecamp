@@ -18,4 +18,5 @@ export default [
   ]),
   // API routes (not in layout)
   route("api/onshape/thumbnail", "routes/api.onshape.thumbnail.tsx"),
+  route("api/onshape/parts", "routes/api.onshape.parts.tsx"),
 ] satisfies RouteConfig;

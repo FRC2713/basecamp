@@ -6,6 +6,8 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -49,7 +51,25 @@ export default function App() {
   // Initialize theme management and listen for system preference changes
   useTheme();
   
-  return <Outlet />;
+  // Create a client instance for TanStack Query
+  // Using useState ensures the client persists across re-renders
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60 * 1000, // 1 minute
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Outlet />
+    </QueryClientProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
