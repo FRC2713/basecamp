@@ -71,12 +71,12 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const session = await getSession(request);
-  const body = await request.json();
-  const { redirectTo } = body;
+  const formData = await request.formData();
+  const redirectTo = formData.get("redirectTo")?.toString() || "/";
 
   // Generate state for CSRF protection
   const state = randomBytes(32).toString("hex");
-  console.log("[AUTH] Generated new state via action:", state);
+  console.log("[AUTH ACTION] Generated new state:", state);
   
   session.set("oauthState", state);
   if (redirectTo && redirectTo !== "/") {
@@ -85,16 +85,18 @@ export async function action({ request }: Route.ActionArgs) {
 
   // Commit session to ensure cookie is set
   const cookie = await commitSession(session);
-  console.log("[AUTH] Set session cookie with state via action. Cookie header length:", cookie.length);
+  console.log("[AUTH ACTION] Set session cookie with state. Cookie header length:", cookie.length);
   
-  return Response.json(
-    { state },
-    {
-      headers: {
-        "Set-Cookie": cookie,
-      },
-    }
-  );
+  // Redirect back to auth page with state parameter
+  // This ensures the cookie is set before we proceed
+  const redirectUrl = `/auth?state=${state}&redirect=${encodeURIComponent(redirectTo)}`;
+  console.log("[AUTH ACTION] Redirecting to:", redirectUrl);
+  
+  return redirect(redirectUrl, {
+    headers: {
+      "Set-Cookie": cookie,
+    },
+  });
 }
 
 export default function Auth({ loaderData }: Route.ComponentProps) {
@@ -106,36 +108,21 @@ export default function Auth({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     // If we don't have an authUrl yet, we need to initialize the state first
+    // Submit a form to trigger the action which will redirect with state
     if (!authUrl) {
-      console.log("[AUTH CLIENT] No authUrl, calling init action");
-      const initializeAuth = async () => {
-        try {
-          const response = await fetch("/auth", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-            body: JSON.stringify({ redirectTo }),
-          });
-
-          const data = await response.json();
-          
-          if (data.state) {
-            console.log("[AUTH CLIENT] Got state from server, reloading with state");
-            // Reload the page with the state parameter so loader can build authUrl
-            window.location.href = `/auth?state=${data.state}&redirect=${encodeURIComponent(redirectTo || "/")}`;
-          } else {
-            console.error("[AUTH CLIENT] Failed to initialize auth:", data.error);
-            window.location.href = `/?error=${encodeURIComponent(data.error || "Failed to initialize authentication")}`;
-          }
-        } catch (error) {
-          console.error("[AUTH CLIENT] Error initializing auth:", error);
-          window.location.href = `/?error=${encodeURIComponent("Failed to initialize authentication")}`;
-        }
-      };
+      console.log("[AUTH CLIENT] No authUrl, submitting form to initialize");
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/auth";
       
-      initializeAuth();
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "redirectTo";
+      input.value = redirectTo || "/";
+      form.appendChild(input);
+      
+      document.body.appendChild(form);
+      form.submit();
       return;
     }
 
