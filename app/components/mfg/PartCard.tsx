@@ -39,10 +39,10 @@ export function PartCard({ part, queryParams, cards, columns }: PartCardProps) {
     <Card className="hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-col gap-2">
-          <CardTitle className="text-lg">
-            {part.name || `Part ${part.partId || part.id || 'Unknown'}`}
-          </CardTitle>
+          <div className="flex flex-row items-center gap-2 flex-wrap">
+            <CardTitle className="text-lg">
+              {part.name || `Part ${part.partId || part.id || 'Unknown'}`}
+            </CardTitle>
             {currentColumn && (
               <ManufacturingStateBadge column={currentColumn} />
             )}
