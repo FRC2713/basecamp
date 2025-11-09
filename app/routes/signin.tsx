@@ -8,27 +8,37 @@ import { Box, CheckCircle2 } from "lucide-react";
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
   const url = new URL(request.url);
-  const redirectTo = url.searchParams.get("redirect") || "/mfg/parts";
+  
+  // Check for redirect in URL params, or use stored value from session, or default
+  const urlRedirect = url.searchParams.get("redirect");
+  const sessionRedirect = session.get("signInRedirect");
+  const redirectTo = urlRedirect || sessionRedirect || "/mfg/parts";
 
   // Check authentication status
   const basecampAuth = await isBasecampAuthenticated(request);
   const onshapeAuth = await isOnshapeAuthenticated(request);
 
-  // Store redirect path in session for after authentication
-  if (redirectTo && redirectTo !== "/") {
+  // Store or update redirect path in session for after authentication
+  if (urlRedirect && urlRedirect !== "/") {
+    session.set("signInRedirect", urlRedirect);
+  } else if (!sessionRedirect && redirectTo !== "/") {
     session.set("signInRedirect", redirectTo);
   }
 
-  const cookie = await commitSession(session);
-
   // If both are authenticated, redirect to the intended destination
   if (basecampAuth && onshapeAuth) {
+    // Clear the signInRedirect from session after using it
+    session.unset("signInRedirect");
+    const cookie = await commitSession(session);
+    
     return redirect(redirectTo, {
       headers: {
         "Set-Cookie": cookie,
       },
     });
   }
+
+  const cookie = await commitSession(session);
 
   return {
     basecampAuth,
@@ -44,13 +54,13 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
   const { basecampAuth, onshapeAuth, redirectTo } = loaderData;
 
   const handleBasecampAuth = () => {
-    // Redirect to Basecamp auth with return path
-    window.location.href = `/auth?redirect=${encodeURIComponent(redirectTo)}`;
+    // Redirect to Basecamp auth - will return to /signin after
+    window.location.href = `/auth?redirect=${encodeURIComponent("/signin")}`;
   };
 
   const handleOnshapeAuth = () => {
-    // Redirect to Onshape auth with return path
-    window.location.href = `/auth/onshape?redirect=${encodeURIComponent(redirectTo)}`;
+    // Redirect to Onshape auth - will return to /signin after
+    window.location.href = `/auth/onshape?redirect=${encodeURIComponent("/signin")}`;
   };
 
   return (

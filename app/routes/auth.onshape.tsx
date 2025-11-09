@@ -7,17 +7,11 @@ import { randomBytes } from "node:crypto";
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
   const url = new URL(request.url);
-  const redirectTo = url.searchParams.get("redirect");
-  
-  // Store redirect path in session if provided
-  if (redirectTo) {
-    session.set("signInRedirect", redirectTo);
-  }
+  const redirectTo = url.searchParams.get("redirect") || "/";
   
   // Check if already authenticated
   if (session.get("onshapeAccessToken")) {
-    const destination = session.get("signInRedirect") || "/";
-    return redirect(destination, {
+    return redirect(redirectTo, {
       headers: {
         "Set-Cookie": await commitSession(session),
       },

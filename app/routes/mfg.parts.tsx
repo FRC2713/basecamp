@@ -48,7 +48,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const basecampAuthenticated = await isBasecampAuthenticated(request);
 
   if (!onshapeAuthenticated || !basecampAuthenticated) {
-    return redirect("/signin?redirect=/mfg/parts");
+    // Preserve the full URL including query parameters for redirect
+    const url = new URL(request.url);
+    const fullPath = url.pathname + url.search;
+    return redirect(`/signin?redirect=${encodeURIComponent(fullPath)}`);
   }
 
   // Validate query parameters

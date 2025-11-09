@@ -58,10 +58,11 @@ export async function loader({ request }: Route.LoaderArgs) {
         session.set("refreshToken", tokenResponse.refresh_token);
         session.set("expiresAt", Date.now() + tokenResponse.expires_in * 1000);
 
-        // Get redirect destination if stored
-        const redirectTo = session.get("signInRedirect") || session.get("oauthRedirect") || "/signin";
+        // Always redirect back to signin page to check if other service needs auth
+        const redirectTo = session.get("oauthRedirect") || "/signin";
         session.unset("oauthState");
         session.unset("oauthRedirect");
+        // Keep signInRedirect in session - signin page will use it once both services are authenticated
 
         console.log("[CALLBACK] Redirecting to:", redirectTo);
         // Redirect back to destination with session cookie

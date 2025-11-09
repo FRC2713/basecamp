@@ -65,10 +65,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     session.unset("onshapeOauthState"); // Remove state after successful exchange
     session.unset("onshapeAuthRedirectCount"); // Clear redirect counter on success
 
-    // Get redirect destination if stored, default to signin page
-    const redirectTo = session.get("signInRedirect") || "/signin";
+    // Always redirect back to signin page to check if other service needs auth
+    // Keep signInRedirect in session - signin page will use it once both services are authenticated
+    const redirectTo = "/signin";
 
-    // Redirect back to signin or intended destination
+    // Redirect back to signin page
     return redirect(redirectTo, {
       headers: {
         "Set-Cookie": await commitSession(session),
