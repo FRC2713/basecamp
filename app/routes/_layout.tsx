@@ -1,5 +1,5 @@
 import type { Route } from "./+types/_layout";
-import { Outlet, useLocation, Link, useRevalidator, redirect } from "react-router";
+import { Outlet, useLocation, Link, useRevalidator } from "react-router";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { Home, RefreshCw, User, LogIn, LogOut } from "lucide-react";
-import { getSession, isBasecampAuthenticated, isOnshapeAuthenticated, destroySession } from "~/lib/session";
+import { isBasecampAuthenticated, isOnshapeAuthenticated } from "~/lib/session";
 
 function getBreadcrumbs(pathname: string) {
   const paths = pathname.split("/").filter(Boolean);
@@ -66,23 +66,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     onshapeAuth,
     isAuthenticated: basecampAuth && onshapeAuth,
   };
-}
-
-export async function action({ request }: Route.ActionArgs) {
-  if (request.method !== "POST") {
-    return Response.json(
-      { error: "Method not allowed" },
-      { status: 405 }
-    );
-  }
-
-  const session = await getSession(request);
-  
-  // Clear all authentication data
-  await destroySession(session);
-  
-  // Redirect to home page
-  return redirect("/");
 }
 
 export default function Layout({ loaderData }: Route.ComponentProps) {
@@ -177,12 +160,10 @@ export default function Layout({ loaderData }: Route.ComponentProps) {
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <form method="post" className="w-full">
-                        <button type="submit" className="flex w-full items-center">
-                          <LogOut className="mr-2 h-4 w-4" />
-                          <span>Sign Out</span>
-                        </button>
-                      </form>
+                      <Link to="/auth/logout" className="flex items-center">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        <span>Sign Out</span>
+                      </Link>
                     </DropdownMenuItem>
                   </>
                 ) : (
