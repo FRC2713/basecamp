@@ -1,5 +1,5 @@
 import type { Route } from "./+types/_layout";
-import { Outlet, useLocation, Link, useRevalidator } from "react-router";
+import { Outlet, useLocation, Link, useRevalidator, redirect } from "react-router";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -9,7 +9,16 @@ import {
   BreadcrumbSeparator,
 } from "~/components/ui/breadcrumb";
 import { Button } from "~/components/ui/button";
-import { Home, RefreshCw } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
+import { Home, RefreshCw, User, LogIn, LogOut } from "lucide-react";
+import { getSession, isBasecampAuthenticated, isOnshapeAuthenticated, destroySession } from "~/lib/session";
 
 function getBreadcrumbs(pathname: string) {
   const paths = pathname.split("/").filter(Boolean);
@@ -48,10 +57,39 @@ function getBreadcrumbs(pathname: string) {
   return breadcrumbs;
 }
 
-export default function Layout() {
+export async function loader({ request }: Route.LoaderArgs) {
+  const basecampAuth = await isBasecampAuthenticated(request);
+  const onshapeAuth = await isOnshapeAuthenticated(request);
+
+  return {
+    basecampAuth,
+    onshapeAuth,
+    isAuthenticated: basecampAuth && onshapeAuth,
+  };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  if (request.method !== "POST") {
+    return Response.json(
+      { error: "Method not allowed" },
+      { status: 405 }
+    );
+  }
+
+  const session = await getSession(request);
+  
+  // Clear all authentication data
+  await destroySession(session);
+  
+  // Redirect to home page
+  return redirect("/");
+}
+
+export default function Layout({ loaderData }: Route.ComponentProps) {
   const location = useLocation();
   const revalidator = useRevalidator();
   const breadcrumbs = getBreadcrumbs(location.pathname);
+  const { isAuthenticated, basecampAuth, onshapeAuth } = loaderData;
 
   const handleRefresh = () => {
     revalidator.revalidate();
@@ -102,15 +140,81 @@ export default function Layout() {
               })}
             </BreadcrumbList>
           </Breadcrumb>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            className="h-8"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              className="h-8"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            
+            {/* User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <User className="h-4 w-4" />
+                  <span className="sr-only">User menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Authentication</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                
+                {isAuthenticated ? (
+                  <>
+                    <div className="px-2 py-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                        <span>Basecamp Connected</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                        <span>Onshape Connected</span>
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <form method="post" className="w-full">
+                        <button type="submit" className="flex w-full items-center">
+                          <LogOut className="mr-2 h-4 w-4" />
+                          <span>Sign Out</span>
+                        </button>
+                      </form>
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    {basecampAuth && (
+                      <div className="px-2 py-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-green-500" />
+                          <span>Basecamp Connected</span>
+                        </div>
+                      </div>
+                    )}
+                    {onshapeAuth && (
+                      <div className="px-2 py-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-green-500" />
+                          <span>Onshape Connected</span>
+                        </div>
+                      </div>
+                    )}
+                    {(basecampAuth || onshapeAuth) && <DropdownMenuSeparator />}
+                    <DropdownMenuItem asChild>
+                      <Link to="/signin" className="flex items-center">
+                        <LogIn className="mr-2 h-4 w-4" />
+                        <span>Sign In</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
