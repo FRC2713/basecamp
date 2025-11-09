@@ -6,6 +6,7 @@ import Fuse from "fuse.js";
 import {
   getSession,
   isOnshapeAuthenticated,
+  isBasecampAuthenticated,
   commitSession,
 } from "~/lib/session";
 import { Card, CardContent } from "~/components/ui/card";
@@ -42,10 +43,12 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
 
-  // Check Onshape authentication (required)
+  // Check both Basecamp and Onshape authentication (both required)
   const onshapeAuthenticated = await isOnshapeAuthenticated(request);
-  if (!onshapeAuthenticated) {
-    return redirect("/auth/onshape?redirect=/mfg/parts");
+  const basecampAuthenticated = await isBasecampAuthenticated(request);
+
+  if (!onshapeAuthenticated || !basecampAuthenticated) {
+    return redirect("/signin?redirect=/mfg/parts");
   }
 
   // Validate query parameters

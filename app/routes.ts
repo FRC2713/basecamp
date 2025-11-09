@@ -9,6 +9,7 @@ export default [
   route("auth/onshape", "routes/auth.onshape.tsx"),
   route("auth/onshape/callback", "routes/auth.onshape.callback.tsx"),
   route("auth/status", "routes/auth.status.tsx"),
+  route("signin", "routes/signin.tsx"),
   // Layout route wrapping all other routes
   layout("routes/_layout.tsx", [
     index("routes/home.tsx"),

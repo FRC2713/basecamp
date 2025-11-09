@@ -59,7 +59,7 @@ export async function loader({ request }: Route.LoaderArgs) {
         session.set("expiresAt", Date.now() + tokenResponse.expires_in * 1000);
 
         // Get redirect destination if stored
-        const redirectTo = session.get("oauthRedirect") || "/";
+        const redirectTo = session.get("signInRedirect") || session.get("oauthRedirect") || "/signin";
         session.unset("oauthState");
         session.unset("oauthRedirect");
 
