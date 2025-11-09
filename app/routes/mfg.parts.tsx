@@ -51,6 +51,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     // Preserve the full URL including query parameters for redirect
     const url = new URL(request.url);
     const fullPath = url.pathname + url.search;
+    console.log("[MFG.PARTS] Not authenticated, redirecting to signin");
+    console.log("[MFG.PARTS] Full path:", fullPath);
+    console.log(
+      "[MFG.PARTS] Encoded redirect URL:",
+      `/signin?redirect=${encodeURIComponent(fullPath)}`
+    );
     return redirect(`/signin?redirect=${encodeURIComponent(fullPath)}`);
   }
 

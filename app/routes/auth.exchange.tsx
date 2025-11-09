@@ -82,8 +82,14 @@ export async function action({ request }: Route.ActionArgs) {
 
     // Get redirect destination if stored
     const redirectTo = session.get("oauthRedirect") || "/";
+    const signInRedirect = session.get("signInRedirect");
+    
+    console.log("[EXCHANGE] oauthRedirect:", redirectTo);
+    console.log("[EXCHANGE] signInRedirect (should be preserved):", signInRedirect);
+    
     session.unset("oauthState"); // Remove state after successful exchange
     session.unset("oauthRedirect"); // Remove redirect after use
+    // Keep signInRedirect - signin page will need it
 
     // Commit session to save cookies
     const cookie = await commitSession(session);

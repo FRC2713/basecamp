@@ -14,19 +14,29 @@ export async function loader({ request }: Route.LoaderArgs) {
   const sessionRedirect = session.get("signInRedirect");
   const redirectTo = urlRedirect || sessionRedirect || "/mfg/parts";
 
+  console.log("[SIGNIN] urlRedirect:", urlRedirect);
+  console.log("[SIGNIN] sessionRedirect:", sessionRedirect);
+  console.log("[SIGNIN] final redirectTo:", redirectTo);
+
   // Check authentication status
   const basecampAuth = await isBasecampAuthenticated(request);
   const onshapeAuth = await isOnshapeAuthenticated(request);
 
+  console.log("[SIGNIN] basecampAuth:", basecampAuth);
+  console.log("[SIGNIN] onshapeAuth:", onshapeAuth);
+
   // Store or update redirect path in session for after authentication
   if (urlRedirect && urlRedirect !== "/") {
+    console.log("[SIGNIN] Storing urlRedirect in session:", urlRedirect);
     session.set("signInRedirect", urlRedirect);
   } else if (!sessionRedirect && redirectTo !== "/") {
+    console.log("[SIGNIN] Storing redirectTo in session:", redirectTo);
     session.set("signInRedirect", redirectTo);
   }
 
   // If both are authenticated, redirect to the intended destination
   if (basecampAuth && onshapeAuth) {
+    console.log("[SIGNIN] Both services authenticated, redirecting to:", redirectTo);
     // Clear the signInRedirect from session after using it
     session.unset("signInRedirect");
     const cookie = await commitSession(session);
